@@ -1,28 +1,32 @@
 <template>
-  <v-app>
-    <v-app-bar color="surface" elevation="2" size="large">
-      <template #prepend>
-        <v-icon icon="mdi-waveform" color="primary" size="52" class="ml-3" />
-      </template>
-      <v-app-bar-title>
-        <div class="text-headline-medium system-font">LinguaAnnotator</div>
-        <div class="text-body-large system-font" style="font-size: 0.70em !important;">
-          Precision labeling for linguistic audio segmentation | v. {{ version }}
-        </div>
-      </v-app-bar-title>
-    </v-app-bar>
-
-    <v-main>
-      <WaveEditor />
-
-      <v-container
-        max-width="780"
-        class="mt-5 mb-10 overflow-y-auto"
-      >
-        <v-card rounded="lg">
-          <v-card-title class="text-overline text-primary pt-5 ps-6 pb-1 system-font"
-            >How to use</v-card-title
+  <v-app class="custom-flex-layout">
+    <header>
+      <v-toolbar color="surface" elevation="2" height="72">
+        <template #prepend>
+          <v-icon icon="mdi-waveform" color="primary" size="52" class="ml-3" />
+        </template>
+        <v-toolbar-title>
+          <div class="text-headline-medium system-font">LinguaAnnotator</div>
+          <div
+            class="text-body-large system-font"
+            style="font-size: 0.7em !important"
           >
+            Precision labeling for linguistic audio segmentation | v.
+            {{ version }}
+          </div>
+        </v-toolbar-title>
+      </v-toolbar>
+    </header>
+
+    <WaveEditor />
+    <main class="scrollable-content">
+      <v-container max-width="780" class="mt-5 mb-10">
+        <v-card rounded="lg">
+          <v-card-title
+            class="text-overline text-primary pt-5 ps-6 pb-1 system-font"
+          >
+            How to use
+          </v-card-title>
           <v-card-text class="ps-6 pe-6 pb-2">
             <ol class="howto-list">
               <li>
@@ -102,32 +106,85 @@
           </v-card-text>
         </v-card>
       </v-container>
-    </v-main>
-    <v-footer padless class="pa-4" height="56" color="surface">
-      <v-container class="d-flex align-center" fluid>
-        <div class="d-flex align-center" style="gap:12px;">
-          <div class="text-body-small">LinguaAnnotator</div>
-          <div class="text-body-small muted">v. {{ version }}</div>
-          <div class="text-body-small">•</div>
-          <div class="text-body-small">by <a href="https://dominicweb.eu" target="_blank" rel="noreferrer" class="link">Dominik M. Ramík</a></div>
-        </div>
-        <v-spacer />
-        <div class="d-flex align-center" style="gap:8px;">
-          <v-btn variant="text" icon="mdi-github" href="https://github.com/dominik-ramik/linguaannotator" target="_blank" rel="noreferrer" />
-          <v-btn variant="text" size="small" href="https://github.com/dominik-ramik/linguaannotator" target="_blank" rel="noreferrer">View on GitHub</v-btn>
-        </div>
-      </v-container>
-    </v-footer>
+    </main>
+
+    <footer>
+      <v-sheet class="pa-4" height="56" elevation="2" color="surface">
+        <v-container class="pa-0 d-flex align-center h-100" fluid>
+          <div class="d-flex align-center" style="gap: 12px">
+            <div class="text-body-small">LinguaAnnotator</div>
+            <div class="text-body-small muted">v. {{ version }}</div>
+            <div class="text-body-small">•</div>
+            <div class="text-body-small">
+              by
+              <a
+                href="https://dominicweb.eu"
+                target="_blank"
+                rel="noreferrer"
+                class="link"
+                >Dominik M. Ramík</a
+              >
+            </div>
+          </div>
+          <v-spacer />
+          <div class="d-flex align-center" style="gap: 8px">
+            <v-btn
+              variant="text"
+              icon="mdi-github"
+              href="https://github.com/dominik-ramik/linguaannotator"
+              target="_blank"
+              rel="noreferrer"
+            />
+            <v-btn
+              variant="text"
+              size="small"
+              href="https://github.com/dominik-ramik/linguaannotator"
+              target="_blank"
+              rel="noreferrer"
+              >View on GitHub</v-btn
+            >
+          </div>
+        </v-container>
+      </v-sheet>
+    </footer>
   </v-app>
 </template>
 
 <script setup>
 import { en } from "vuetify/locale";
 import WaveEditor from "./components/WaveEditor.vue";
-import { version } from '../package.json';
+import { version } from "../package.json";
 </script>
 
 <style>
+/* 1. Kill the default browser window scrollbar */
+html {
+  overflow: hidden !important;
+}
+
+/* 2. Global Flexbox layout for the app */
+.custom-flex-layout {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100dvh !important;
+}
+
+/* 3. Ensure Header and Footer never shrink or grow */
+header,
+footer {
+  flex-shrink: 0;
+  z-index: 10; /* Keeps shadows rendering over the main content */
+}
+
+/* 4. Main content stretches and scrolls internally */
+.scrollable-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  position: relative;
+  background-color: var(--v-theme-background);
+}
+
+/* Existing HowTo Styles */
 .howto-list {
   margin: 0;
   padding-left: 1.4em;
