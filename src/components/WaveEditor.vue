@@ -41,6 +41,7 @@
       </button>
       <div style="flex: 1"></div>
       <button @click="openModal">📤 View labels</button>
+      <button @click="openGitHub">🐙 LinguaAnnotator on GitHub</button>
     </div>
 
     <div id="timeline" class="timeline"></div>
@@ -114,6 +115,10 @@ const waveReady = ref(false);
 
 function createUid() {
   return `gt-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function openGitHub() {
+  window.open("https://github.com/dominik-ramik/linguaannotator", "_blank");
 }
 
 function getLabelFromRegion(region) {
