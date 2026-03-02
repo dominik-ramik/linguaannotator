@@ -2,6 +2,12 @@
 
 **Fast and simple labeling for linguistic audio segmentation.**
 
+<p align="center">
+  <a href="https://linguaannotator.netlify.app/">
+    <img src="https://img.shields.io/badge/Try%20the%20Web%20App-Open-blue?logo=netlify&style=for-the-badge" alt="Try the web app">
+  </a>
+</p>
+
 LinguaAnnotator is a lightweight, browser-based tool designed to make annotating, aligning, and segmenting linguistic audio fast and intuitive as a lightweight alternative to tools like ELAN. It allows you to visually mark audio regions and export them as standard label files—perfectly formatted for batch-splitting in tools like Audacity.
 
 ## Features
