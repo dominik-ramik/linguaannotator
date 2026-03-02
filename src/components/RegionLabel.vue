@@ -12,17 +12,16 @@
     </div>
     <!-- Middle row: left resize | text | right resize -->
     <div class="middle-row" style="display: flex; height: 2em;">
-      <div class="resize-handle resize-l" ref="resLHandle" style="width: 4em; text-align: center; background-color: #ffffff22;">&lt;</div>
-      <!-- Use a textarea so long labels can wrap to new lines -->
+      <div class="resize-handle resize-l" ref="resLHandle" style="width: 60px; text-align: center; background-color: #ffffff22;">&lt;</div>
       <input
         type="text"
         class="region-input"
-        style="flex-grow: 1"
+        style="flex-grow: 1; min-width: 10px;"
         v-model="label"
         @mousedown.stop
         @keydown.space.stop
       />
-      <div class="resize-handle resize-r" ref="resRHandle" style="width: 4em; text-align: center; background-color: #ffffff22;">&gt;</div>
+      <div class="resize-handle resize-r" ref="resRHandle" style="width: 60px; text-align: center; background-color: #ffffff22;">&gt;</div>
     </div>
 
     <!-- Bottom handle: move with ripple effect -->

@@ -1,7 +1,18 @@
 <template>
   <div class="editor">
-    <div class="toolbar-row">
-      <button class="file" @click="triggerAudioPick">📂 Load audio / video</button>
+    <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
+    <v-toolbar color="surface" :elevation="1" class="px-2 mt-4 mb-4">
+      <!-- File group -->
+      <v-btn
+        variant="tonal"
+        color="secondary"
+        :prepend-icon="loadingWave ? '' : 'mdi-folder-open-outline'"
+        :loading="loadingWave"
+        :disabled="loadingWave"
+        class="mr-1"
+        @click="triggerAudioPick"
+        >Load audio / video</v-btn
+      >
       <input
         ref="audioFileInput"
         type="file"
@@ -10,7 +21,15 @@
         style="display: none"
       />
 
-      <button class="file" @click="triggerLabelPick">📄 Load labels</button>
+      <v-btn
+        variant="tonal"
+        color="secondary"
+        prepend-icon="mdi-file-document-outline"
+        class="mr-2"
+        @click="triggerLabelPick"
+        :disabled="!waveReady"
+        >Load labels</v-btn
+      >
       <input
         ref="labelFileInput"
         type="file"
@@ -19,47 +38,118 @@
         style="display: none"
       />
 
-      <label
-        >Zoom:
-        <input
-          type="range"
-          min="5"
-          max="100"
-          v-model.number="zoom"
-          @input="onZoom"
-      /></label>
+      <v-divider vertical class="mx-2" />
 
-      <button @click="downloadLabels" style="margin-left: 5em">
-        ⬇️ Download labels
-      </button>
+      <!-- Zoom -->
+      <v-icon
+        icon="mdi-magnify-plus-outline"
+        size="24"
+        color="medium-emphasis"
+        class="mr-0 ml-3"
+      />
+      <v-slider
+        v-model="zoom"
+        min="5"
+        max="100"
+        hide-details
+        color="primary"
+        class="ml-2 mr-3"
+        style="width: 120px; flex: none"
+        @update:model-value="onZoom"
+        :disabled="!waveReady"
+      />
 
-      <button
-        v-if="waveReady && groundTruth.length === 0"
-        @click="addDefaultLabel"
+      <v-divider vertical class="mx-2" />
+
+      <!-- Actions -->
+      <v-btn
+        variant="tonal"
+        color="secondary"
+        prepend-icon="mdi-download-outline"
+        class="mr-1"
+        :disabled="!waveReady"
+        @click="downloadLabels"
+        >Download labels</v-btn
       >
-        ➕ Add default label
-      </button>
-      <div style="flex: 1"></div>
-      <button @click="openModal">📤 View labels</button>
-      <button @click="openGitHub">🐙 LinguaAnnotator on GitHub</button>
-    </div>
 
+      <v-btn
+        v-if="waveReady && groundTruth.length === 0"
+        variant="tonal"
+        color="secondary"
+        prepend-icon="mdi-plus"
+        @click="addDefaultLabel"
+        >Add new label</v-btn
+      >
+
+      <v-spacer />
+
+      <!-- Secondary -->
+      <v-btn
+        variant="tonal"
+        color="secondary"
+        prepend-icon="mdi-format-list-bulleted"
+        class="mr-1"
+        :disabled="!waveReady"
+        @click="openModal"
+        >View labels</v-btn
+      >
+
+      <v-btn
+        variant="text"
+        color="medium-emphasis"
+        prepend-icon="mdi-github"
+        @click="openGitHub"
+        >LinguaAnnotator on GitHub</v-btn
+      >
+    </v-toolbar>
+
+    <!-- ── Waveform (untouched) ────────────────────────────────────────── -->
     <div id="timeline" class="timeline"></div>
     <div id="waveform" class="waveform"></div>
 
-    <div v-if="showOverlay" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-box">
-        <h3>View Labels</h3>
-        <p class="muted">Format: Start(sec) [tab] End(sec) [tab] Label</p>
-        <textarea v-model="ioText" readonly></textarea>
-        <div class="modal-actions">
-          <button @click="exportLabels" class="btn-primary">
-            Copy to Clipboard
-          </button>
-          <button @click="closeModal">Close</button>
-        </div>
-      </div>
-    </div>
+    <!-- ── Labels dialog ──────────────────────────────────────────────── -->
+    <v-dialog v-model="showOverlay" max-width="720" scrollable>
+      <v-card rounded="lg">
+        <v-card-title class="d-flex align-center pt-5 ps-6 pe-4">
+          <span>Labels</span>
+          <v-spacer />
+          <v-btn
+            icon="mdi-close"
+            variant="text"
+            density="compact"
+            @click="closeModal"
+          />
+        </v-card-title>
+        <v-card-subtitle class="ps-6 pb-2">
+          Start(sec) &middot; End(sec) &middot; Label
+        </v-card-subtitle>
+        <v-divider />
+        <v-card-text class="pa-4">
+          <v-textarea
+            v-model="ioText"
+            readonly
+            variant="outlined"
+            rows="16"
+            hide-details
+            font-family="monospace"
+            class="labels-textarea"
+          />
+        </v-card-text>
+        <v-divider />
+        <v-card-actions class="px-6 py-4 justify-end">
+          <v-btn variant="outlined" color="secondary" @click="closeModal"
+            >Close</v-btn
+          >
+          <v-btn
+            variant="flat"
+            color="primary"
+            prepend-icon="mdi-content-copy"
+            @click="exportLabels"
+            >Copy to clipboard</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -112,6 +202,7 @@ const importingRegions = new Map(); // Temporary map during import: uid -> regio
 const showOverlay = ref(false);
 const ioText = ref("");
 const waveReady = ref(false);
+const loadingWave = ref(false);
 
 function createUid() {
   return `gt-${Math.random().toString(36).slice(2, 10)}`;
@@ -256,6 +347,14 @@ function logGroundTruth() {
 function onFile(e) {
   const file = e.target.files[0];
   if (!file) return;
+  // Mark waveform as not-ready while loading a new file so UI controls
+  // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
+  try {
+    waveReady.value = false;
+  } catch (e) {}
+  try {
+    loadingWave.value = true;
+  } catch (err) {}
   wavesurfer.value.load(URL.createObjectURL(file));
 }
 
@@ -652,6 +751,7 @@ onMounted(() => {
 
   wavesurfer.value.on("ready", () => {
     waveReady.value = true;
+    try { loadingWave.value = false; } catch (e) {}
     if (regionsPlugin.value) {
       regionsPlugin.value
         .getRegions()
@@ -661,6 +761,16 @@ onMounted(() => {
     // Start automatic backups when wavesurfer is ready
     startAutoBackup(groundTruth);
   });
+  // If Wavesurfer reports an error while loading/decoding, ensure UI
+  // returns to a non-ready state so controls remain disabled.
+  try {
+    wavesurfer.value.on("error", () => {
+      try {
+        waveReady.value = false;
+        loadingWave.value = false;
+      } catch (e) {}
+    });
+  } catch (e) {}
 
   // Global hotkey: Space toggles play/pause at current cursor position
   const globalPlayPause = (ev) => {
@@ -805,61 +915,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Button theme (uses #4f4a85) — applies to toolbar buttons, hidden-file triggers and modal actions */
-.toolbar-row button,
-.toolbar-row .file,
-.modal-actions button,
-button.btn-primary {
-  color: #4f4a85;
-  background-color: #cdcdcd;
-  border: 1px solid rgba(79, 74, 133, 0.9);
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  transition:
-    background 0.12s ease,
-    transform 0.06s ease,
-    box-shadow 0.12s ease;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
-}
-
-/* Hover / active / focus states */
-.toolbar-row button:hover,
-.modal-actions button:hover,
-button.btn-primary:hover {
-  background: #5f5a95;
-  transform: translateY(-1px);
-}
-.toolbar-row button:active,
-.modal-actions button:active {
-  transform: translateY(0);
-}
-.toolbar-row button:focus,
-.modal-actions button:focus,
-button.btn-primary:focus {
-  outline: 3px solid rgba(79, 74, 133, 0.18);
-  outline-offset: 2px;
-}
-
-/* Prevent file-buttons from wrapping */
-.toolbar-row .file {
-  white-space: nowrap;
-}
-.toolbar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: #2d2d2d;
-}
-.toolbar-row input[type="file"] {
-  color: #ddd;
-}
 .waveform {
   height: 250px;
   background: #111;
@@ -868,70 +923,9 @@ button.btn-primary:focus {
   height: 20px;
   background: #111;
 }
-.regions-list {
-  padding: 12px;
-}
-.region-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.region-row input {
-  flex: 1;
-}
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.8);
-  z-index: 2000;
-}
-.modal-box {
-  background: #2d2d2d;
-  padding: 24px;
-  border-radius: 8px;
-  width: 700px;
-  max-width: 90vw;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-.modal-box h3 {
-  margin-top: 0;
-  margin-bottom: 8px;
-}
-.modal-box textarea {
-  flex: 1;
-  min-height: 400px;
-  background: #1e1e1e;
-  color: #ddd;
-  border: 1px solid #555;
-  border-radius: 4px;
-  padding: 12px;
+.labels-textarea :deep(textarea) {
   font-family: "Consolas", "Monaco", monospace;
   font-size: 13px;
-  resize: vertical;
-  margin-bottom: 12px;
-}
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-.btn-primary {
-  background: #4f4a85;
-  color: white;
-  font-weight: 600;
-}
-.btn-primary:hover {
-  background: #5f5a95;
-}
-.muted {
-  color: #aaa;
-  font-size: 0.9em;
+  line-height: 1.65;
 }
 </style>
