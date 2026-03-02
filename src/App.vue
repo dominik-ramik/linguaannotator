@@ -11,7 +11,7 @@
             class="text-body-large system-font"
             style="font-size: 0.7em !important"
           >
-            Precision labeling for linguistic audio segmentation | v.
+            Fast and simple labeling for linguistic audio segmentation | v.
             {{ version }}
           </div>
         </v-toolbar-title>
