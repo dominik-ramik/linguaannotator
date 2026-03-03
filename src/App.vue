@@ -18,7 +18,7 @@
       </v-toolbar>
     </header>
 
-    <WaveEditor />
+    <WaveEditor class="mb-5" />
     <main class="scrollable-content">
       <v-container max-width="780" class="mt-5 mb-10">
         <v-card rounded="lg">
