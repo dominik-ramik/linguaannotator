@@ -45,10 +45,10 @@ To split your audio into individual files based on these labels using Audacity:
 2. Go to **File → Import → Labels** and select your downloaded `.txt` file.
 3. Go to **File → Export → Export Multiple** and choose to split the files based on your labels. Audacity will automatically save each marked region as its own audio file.
 
-## 👨Author
+## Author
 
-Created by **Dominik M. Ramík** Website: [dominicweb.eu](https://dominicweb.eu) for [Plants amd People of Vanuatu](https://pvnh.net/plants-and-people-of-vanuatu/) research project
+Created by **Dominik M. Ramík** Website: [dominicweb.eu](https://dominicweb.eu) for [Plants and People of Vanuatu](https://pvnh.net/plants-and-people-of-vanuatu/) research project
 
-## 📄 License
+## License
 
 LinguaAnnotator © 2026 by Dominik M. Ramík is licensed under CC BY-NC-SA 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by-nc-sa/4.0/
