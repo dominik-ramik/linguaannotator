@@ -108,6 +108,13 @@
         >Add new label</v-btn
       >
 
+      <v-switch
+        v-model="showExtendedCommands"
+        label="Show label commands"
+        class="mx-2 mt-5"
+        :disabled="!waveReady"
+      />
+
       <v-spacer />
 
       <!-- Secondary -->
@@ -192,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, createApp } from "vue";
+import { ref, reactive, watch, onMounted, onBeforeUnmount, createApp } from "vue";
 import WaveSurfer from "wavesurfer.js";
 // Import Wavesurfer plugins as ESM modules for bundlers
 // Use the ESM builds which Vite can resolve
@@ -243,6 +250,7 @@ const showOverlay = ref(false);
 const ioText = ref("");
 const waveReady = ref(false);
 const loadingWave = ref(false);
+const showExtendedCommands = ref(false);
 
 const toast = reactive({ show: false, text: "", color: "success", icon: "mdi-check-circle-outline" });
 let _toastTimer = null;
@@ -930,12 +938,17 @@ onMounted(() => {
         onAddRegionRight: () => {
           addAdjacentRegion("right", r);
         },
+            showExtendedCommands: showExtendedCommands.value,
         canAddLeft: computeCanAddAdjacent(r).canLeft,
         canAddRight: computeCanAddAdjacent(r).canRight,
       });
       const instance = app.mount(mountEl);
       r.__vueApp = app;
       r.__vueInstance = instance;
+      // Ensure the instance receives the current showExtendedCommands flag
+      try {
+        if (instance) instance.showExtendedCommands = showExtendedCommands.value;
+      } catch (e) {}
       // ensure instance flags are set on the mounted instance
       try {
         const flags = computeCanAddAdjacent(r);
@@ -963,6 +976,18 @@ onMounted(() => {
       setupRegionDOM(r, attachDrag);
     }
   });
+
+function updateAllShowExtended() {
+  if (!regionsPlugin.value) return;
+  const regs = regionsPlugin.value.getRegions().filter((r) => r && r.__vueInstance);
+  regs.forEach((r) => {
+    try {
+      r.__vueInstance.showExtendedCommands = showExtendedCommands.value;
+    } catch (e) {}
+  });
+}
+
+watch(showExtendedCommands, () => updateAllShowExtended());
 
   regionsPlugin.value.on("region-updated", (region) => {
     ensureGroundTruthEntry(region);
