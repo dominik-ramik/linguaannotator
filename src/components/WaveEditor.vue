@@ -509,7 +509,8 @@ function recomputeAllCanAdd() {
   });
 }
 
-function addAdjacentRegion(side, baseRegion) {
+function addAdjacentRegion(side, baseRegion, initialLabel) {
+  console.log("Attempting to add adjacent region on", side, "of", baseRegion, "with label", initialLabel);
   if (!regionsPlugin.value || !baseRegion) return false;
   const dur =
     wavesurfer.value && typeof wavesurfer.value.getDuration === "function"
@@ -529,11 +530,34 @@ function addAdjacentRegion(side, baseRegion) {
       if (!(re <= start || rs >= end)) return false;
     }
     try {
-      regionsPlugin.value.addRegion({
+      const uid = createUid();
+      const lbl = initialLabel || "Text";
+      importingEntries.set(uid, { label: lbl });
+      const newReg = regionsPlugin.value.addRegion({
         start,
         end,
-        data: { label: "Text", uid: createUid() },
+        data: { label: lbl, uid },
       });
+      // Belt-and-suspenders: WaveSurfer may fire region-created before
+      // applying data, so guarantee the label a tick later.
+      setTimeout(() => {
+        try {
+          const reg = newReg ||
+            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          if (!reg) return;
+          // Ensure region data has the label
+          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          // Fix groundTruth entry
+          const gtEntry = groundTruth.find((e) => e.uid === uid);
+          if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
+          // Fix mounted component input
+          if (reg.__vueInstance && "label" in reg.__vueInstance &&
+              reg.__vueInstance.label !== lbl) {
+            reg.__vueInstance.label = lbl;
+          }
+        } catch (_) {}
+        importingEntries.delete(uid);
+      }, 0);
       return true;
     } catch (e) {
       return false;
@@ -552,11 +576,34 @@ function addAdjacentRegion(side, baseRegion) {
       if (!(re <= start || rs >= end)) return false;
     }
     try {
-      regionsPlugin.value.addRegion({
+      const uid = createUid();
+      const lbl = initialLabel || "Text";
+      importingEntries.set(uid, { label: lbl });
+      const newReg = regionsPlugin.value.addRegion({
         start,
         end,
-        data: { label: "Text", uid: createUid() },
+        data: { label: lbl, uid },
       });
+      // Belt-and-suspenders: WaveSurfer may fire region-created before
+      // applying data, so guarantee the label a tick later.
+      setTimeout(() => {
+        try {
+          const reg = newReg ||
+            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          if (!reg) return;
+          // Ensure region data has the label
+          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          // Fix groundTruth entry
+          const gtEntry = groundTruth.find((e) => e.uid === uid);
+          if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
+          // Fix mounted component input
+          if (reg.__vueInstance && "label" in reg.__vueInstance &&
+              reg.__vueInstance.label !== lbl) {
+            reg.__vueInstance.label = lbl;
+          }
+        } catch (_) {}
+        importingEntries.delete(uid);
+      }, 0);
       return true;
     } catch (e) {
       return false;
@@ -907,9 +954,11 @@ onMounted(() => {
 
   // region events
   regionsPlugin.value.on("region-created", (r) => {
-    // If this region was created during import, get the label from the importing map
+    // If this region was created during import or adjacent-add, get the label
+    // from the importing map and immediately clean up the entry so it doesn't linger.
     const importedEntry =
       r.data && r.data.uid ? importingEntries.get(r.data.uid) : null;
+    if (importedEntry && r.data && r.data.uid) importingEntries.delete(r.data.uid);
     const labelOverride = importedEntry ? importedEntry.label : undefined;
     const entry = ensureGroundTruthEntry(r, labelOverride);
     if (!entry) return;
@@ -932,11 +981,11 @@ onMounted(() => {
             r.remove();
           } catch (e) {}
         },
-        onAddRegionLeft: () => {
-          addAdjacentRegion("left", r);
+        onAddRegionLeft: (initialLabel) => {
+          addAdjacentRegion("left", r, initialLabel);
         },
-        onAddRegionRight: () => {
-          addAdjacentRegion("right", r);
+        onAddRegionRight: (initialLabel) => {
+          addAdjacentRegion("right", r, initialLabel);
         },
             showExtendedCommands: showExtendedCommands.value,
         canAddLeft: computeCanAddAdjacent(r).canLeft,

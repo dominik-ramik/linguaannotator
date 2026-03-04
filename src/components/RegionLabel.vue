@@ -140,8 +140,17 @@ function doAddLeft() {
 function doAddRight() {
   menuOpen.value = false;
   try {
-    if (canAddRight.value && typeof props.onAddRegionRight === "function")
-      props.onAddRegionRight();
+    if (canAddRight.value && typeof props.onAddRegionRight === "function") {
+      let initial = undefined;
+      try {
+        const m = (label.value || "").match(/^(\d+)-/);
+        if (m) {
+          const n = parseInt(m[1], 10) + 1;
+          initial = `${n}-`;
+        }
+      } catch (e) {}
+      props.onAddRegionRight(initial);
+    }
   } catch (e) {}
 }
 
@@ -288,8 +297,17 @@ onMounted(() => {
   function doAddRight() {
     menuOpen.value = false;
     try {
-      if (typeof props.onAddRegionRight === "function")
-        props.onAddRegionRight();
+      if (typeof props.onAddRegionRight === "function") {
+        let initial = undefined;
+        try {
+          const m = (label.value || "").match(/^(\d+)-/);
+          if (m) {
+            const n = parseInt(m[1], 10) + 1;
+            initial = `${n}-`;
+          }
+        } catch (e) {}
+        props.onAddRegionRight(initial);
+      }
     } catch (e) {}
   }
 
