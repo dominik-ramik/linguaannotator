@@ -1,5 +1,32 @@
 <template>
   <div class="editor">
+    <!-- ── Drop overlay ──────────────────────────────────────────────── -->
+    <transition name="drop-fade">
+      <div v-if="isDragOver" class="drop-overlay">
+        <v-icon icon="mdi-file-arrow-down-outline" size="64" color="primary" />
+        <div class="text-h6 mt-3">Drop to load</div>
+      </div>
+    </transition>
+
+    <!-- ── Unsupported file dialog ────────────────────────────────────── -->
+    <v-dialog v-model="unsupportedFileDialog" max-width="400">
+      <v-card rounded="lg">
+        <v-card-title class="pt-5 ps-6">Unsupported file type</v-card-title>
+        <v-card-text class="ps-6 pe-6">
+          Only audio&nbsp;/&nbsp;video files and <strong>.txt</strong> label
+          files can be dropped here.
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5 justify-end">
+          <v-btn
+            variant="flat"
+            color="primary"
+            @click="unsupportedFileDialog = false"
+            >OK</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
     <v-toolbar color="surface" :elevation="1" class="px-2 mt-4 mb-4">
       <!-- File group -->
@@ -150,6 +177,17 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- ── Toast ─────────────────────────────────────────────────────── -->
+    <v-snackbar
+      v-model="toast.show"
+      :color="toast.color"
+      location="bottom center"
+      :timeout="3000"
+      rounded="pill"
+    >
+      <v-icon :icon="toast.icon" class="mr-2" />{{ toast.text }}
+    </v-snackbar>
   </div>
 </template>
 
@@ -174,6 +212,8 @@ const regionsPlugin = ref(null);
 /* --- Hidden file input refs and trigger helpers --- */
 const audioFileInput = ref(null);
 const labelFileInput = ref(null);
+const isDragOver = ref(false);
+const unsupportedFileDialog = ref(false);
 function triggerAudioPick() {
   try {
     if (audioFileInput.value) {
@@ -203,6 +243,19 @@ const showOverlay = ref(false);
 const ioText = ref("");
 const waveReady = ref(false);
 const loadingWave = ref(false);
+
+const toast = reactive({ show: false, text: "", color: "success", icon: "mdi-check-circle-outline" });
+let _toastTimer = null;
+function showToast(text, { color = "success", icon = "mdi-check-circle-outline" } = {}) {
+  if (_toastTimer) clearTimeout(_toastTimer);
+  toast.text = text;
+  toast.color = color;
+  toast.icon = icon;
+  toast.show = true;
+  _toastTimer = setTimeout(() => { toast.show = false; }, 3200);
+}
+
+let pendingAudioName = "";
 
 function createUid() {
   return `gt-${Math.random().toString(36).slice(2, 10)}`;
@@ -344,9 +397,9 @@ function logGroundTruth() {
   );
 }
 
-function onFile(e) {
-  const file = e.target.files[0];
+function loadAudioFile(file) {
   if (!file) return;
+  pendingAudioName = file.name;
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -356,6 +409,10 @@ function onFile(e) {
     loadingWave.value = true;
   } catch (err) {}
   wavesurfer.value.load(URL.createObjectURL(file));
+}
+
+function onFile(e) {
+  loadAudioFile(e.target.files[0]);
 }
 
 function onZoom() {
@@ -500,30 +557,62 @@ function addAdjacentRegion(side, baseRegion) {
   return false;
 }
 
-function onLabelFile(e) {
-  const file = e.target.files[0];
+function loadLabelFile(file) {
   if (!file) return;
   // If there are existing labels, warn the user that loading will clear them
   if (groundTruth.length > 0) {
     const ok = window.confirm(
       "There are existing labels. Loading a label file will remove all current labels. Do you want to proceed?",
     );
-    if (!ok) {
-      // reset file input so the user can re-select later
-      try {
-        e.target.value = "";
-      } catch (err) {}
-      return;
-    }
+    if (!ok) return;
   }
+  const labelName = file.name;
   const reader = new FileReader();
   reader.onload = () => {
     const text = reader.result;
     if (typeof text === "string") {
       importLabelsFromText(text);
+      showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
     }
   };
   reader.readAsText(file);
+}
+
+function onLabelFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  // Reset input upfront so the same file can be re-selected later
+  try { e.target.value = ""; } catch (err) {}
+  loadLabelFile(file);
+}
+
+function handleDocDragOver(e) {
+  e.preventDefault();
+  isDragOver.value = true;
+}
+
+function handleDocDragLeave(e) {
+  // Only clear when leaving the browser viewport entirely
+  if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+    isDragOver.value = false;
+  }
+}
+
+function handleDocDrop(e) {
+  e.preventDefault();
+  isDragOver.value = false;
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) {
+    loadAudioFile(file);
+  } else if (
+    file.name.toLowerCase().endsWith(".txt") ||
+    file.type === "text/plain"
+  ) {
+    loadLabelFile(file);
+  } else {
+    unsupportedFileDialog.value = true;
+  }
 }
 
 function deleteRegion(id) {
@@ -752,6 +841,10 @@ onMounted(() => {
   wavesurfer.value.on("ready", () => {
     waveReady.value = true;
     try { loadingWave.value = false; } catch (e) {}
+    if (pendingAudioName) {
+      showToast(`Loaded: ${pendingAudioName}`, { icon: "mdi-waveform" });
+      pendingAudioName = "";
+    }
     if (regionsPlugin.value) {
       regionsPlugin.value
         .getRegions()
@@ -900,6 +993,10 @@ onMounted(() => {
       refreshIoTextFromGroundTruth();
     } catch (e) {}
   });
+
+  document.addEventListener("dragover", handleDocDragOver);
+  document.addEventListener("dragleave", handleDocDragLeave);
+  document.addEventListener("drop", handleDocDrop);
 });
 
 onBeforeUnmount(() => {
@@ -908,6 +1005,9 @@ onBeforeUnmount(() => {
   try {
     window.removeEventListener("keydown", globalPlayPause);
   } catch (e) {}
+  document.removeEventListener("dragover", handleDocDragOver);
+  document.removeEventListener("dragleave", handleDocDragLeave);
+  document.removeEventListener("drop", handleDocDrop);
   if (wavesurfer.value) wavesurfer.value.destroy();
 });
 
@@ -927,5 +1027,30 @@ onBeforeUnmount(() => {
   font-family: "Consolas", "Monaco", monospace;
   font-size: 13px;
   line-height: 1.65;
+}
+.editor {
+  position: relative;
+}
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  pointer-events: none;
+  color: rgb(var(--v-theme-primary));
+}
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 </style>
