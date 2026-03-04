@@ -173,15 +173,16 @@ onMounted(() => {
 
   // Watch textarea value and sync back to region
   watch(label, (v) => {
+    // Update r.data.label FIRST so that any synchronous region-updated event
+    // fired by setOptions sees the new value and doesn't clobber it back.
     try {
-      if (r.data && r.data.label === v) return;
+      r.data = Object.assign({}, r.data, { label: v });
+    } catch (e) {}
+    try {
       // Ensure the wavesurfer region does NOT render the label text in its
       // default content area. The authoritative text is the RegionLabel input
       // which is synced to the ground truth. So clear region.content here.
       if (typeof r.setOptions === "function") r.setOptions({ content: "" });
-    } catch (e) {}
-    try {
-      r.data = Object.assign({}, r.data, { label: v });
     } catch (e) {}
     if (typeof props.onLabelUpdate === "function") {
       try {

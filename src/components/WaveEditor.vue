@@ -322,10 +322,17 @@ function ensureGroundTruthEntry(region, labelOverride) {
     if (typeof region.setOptions === "function")
       region.setOptions({ content: "" });
   } catch (e) {}
-  // If a RegionLabel component is mounted, ensure its input shows the label
+  // If a RegionLabel component is mounted, it is the authoritative source for
+  // the displayed label (user may be actively editing). Only push the label
+  // INTO the component when there is no mounted instance yet (initial setup).
+  // When an instance IS mounted, read its current label back into groundTruth
+  // so that region-updated (fired by resize/drag) doesn't clobber user edits.
   try {
     if (region && region.__vueInstance && "label" in region.__vueInstance) {
-      region.__vueInstance.label = entry.label;
+      const liveLabel = region.__vueInstance.label;
+      if (typeof liveLabel === "string" && liveLabel !== entry.label) {
+        entry.label = liveLabel;
+      }
     }
   } catch (err) {
     /* ignore */
