@@ -26,7 +26,7 @@
 
     <!-- Bottom handle: move with ripple effect -->
     <div class="handle-bottom" ref="bottomHandle" style="text-align: center; height: 3em;">
-      ⇼ <span style="font-size: 0.6em;"> {{ durationText }}</span>
+      ⇼<br/><span style="font-size: 0.6em;"> {{ durationText }}</span>
     </div>
   </div>
 </template>
