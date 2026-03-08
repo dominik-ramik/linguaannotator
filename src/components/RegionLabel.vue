@@ -2,31 +2,60 @@
   <div class="region-vue" style="border: 1px solid white">
     <!-- Top handle: move within free space (blocked by neighbors) -->
     <div class="top-row" style="display: flex; position: relative">
-      <div class="handle-top" ref="topHandle" style="text-align: center; flex-grow: 1;">↔</div>
-      <button class="menu-btn" ref="menu" @click.stop="toggleMenu" style="padding-left: 0.4em; padding-right: 0.4em; background-color: #ffffff22; border: none; color: inherit; cursor: pointer">⋯</button>
-      <div v-if="menuOpen" class="menu-popup" @click.stop>
-        <button class="menu-item" @click="doDelete">Delete</button>
-        <button class="menu-item" @click="doAddLeft" :disabled="!canAddLeft">Add left</button>
-        <button class="menu-item" @click="doAddRight" :disabled="!canAddRight">Add right</button>
+      <div
+        class="handle-top"
+        ref="topHandle"
+        style="text-align: center; flex-grow: 1"
+      >
+        ↔
       </div>
+      <button v-if="showExtendedCommands" class="menu-item" @click.stop="openConfirmDelete">x</button>
+    </div>
+
+    <div style="display: flex; flex-direction: row; flex-wrap: nowrap">
+      <button v-if="showExtendedCommands" class="menu-item" @click="doAddLeft" :disabled="!canAddLeft">
+        &lt; +
+      </button>
+      <span style="flex-grow: 1; font-size: 0.6em; text-align: center">
+        {{ durationText }}</span
+      >
+      <button v-if="showExtendedCommands" class="menu-item" @click="doAddRight" :disabled="!canAddRight">
+        + &gt;
+      </button>
     </div>
     <!-- Middle row: left resize | text | right resize -->
-    <div class="middle-row" style="display: flex; height: 2em;">
-      <div class="resize-handle resize-l" ref="resLHandle" style="width: 60px; text-align: center; background-color: #ffffff22;">&lt;</div>
+    <div class="middle-row" style="display: flex; height: 2em">
+      <div
+        class="resize-handle resize-l"
+        ref="resLHandle"
+        style="width: 60px; text-align: center; background-color: #ffffff22"
+      >
+        &lt;
+      </div>
       <input
         type="text"
         class="region-input"
-        style="flex-grow: 1; min-width: 10px;"
+        style="flex-grow: 1; min-width: 10px"
         v-model="label"
         @mousedown.stop
         @keydown.space.stop
       />
-      <div class="resize-handle resize-r" ref="resRHandle" style="width: 60px; text-align: center; background-color: #ffffff22;">&gt;</div>
+      <div
+        class="resize-handle resize-r"
+        ref="resRHandle"
+        style="width: 60px; text-align: center; background-color: #ffffff22"
+      >
+        &gt;
+      </div>
     </div>
 
     <!-- Bottom handle: move with ripple effect -->
-    <div class="handle-bottom" ref="bottomHandle" style="text-align: center; height: 3em;">
-      ⇼ <span style="font-size: 0.6em;"> {{ durationText }}</span>
+    <div
+      class="handle-bottom"
+      ref="bottomHandle"
+      style="text-align: center; height: 3em"
+    >
+      ⇼
     </div>
   </div>
 </template>
@@ -44,6 +73,7 @@ const props = defineProps({
   onAddRegionRight: Function,
   canAddLeft: { type: Boolean, default: false },
   canAddRight: { type: Boolean, default: false },
+  showExtendedCommands: { type: Boolean, default: false },
 });
 const label = ref("");
 const topHandle = ref(null);
@@ -55,14 +85,36 @@ const durationText = ref("");
 const menuOpen = ref(false);
 const canAddLeft = ref(Boolean(props.canAddLeft));
 const canAddRight = ref(Boolean(props.canAddRight));
+const showExtendedCommands = ref(Boolean(props.showExtendedCommands));
 
 // Expose refs so parent can attach drag handlers and allow parent to set label
 // Also expose the canAdd flags so the parent can update them directly on the
 // mounted instance (WaveEditor sets instance.canAddLeft/Right).
-defineExpose({ topHandle, bottomHandle, resLHandle, resRHandle, label, canAddLeft, canAddRight });
+defineExpose({
+  topHandle,
+  bottomHandle,
+  resLHandle,
+  resRHandle,
+  label,
+  canAddLeft,
+  canAddRight,
+  showExtendedCommands,
+});
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value;
+}
+
+function openConfirmDelete() {
+  try {
+    const ok = window.confirm(
+      "Delete this region? This action cannot be undone."
+    );
+    if (ok) doDelete();
+  } catch (e) {
+    // fallback: if window.confirm is not available, proceed with delete
+    doDelete();
+  }
 }
 
 function doDelete() {
@@ -72,21 +124,33 @@ function doDelete() {
     // stop treating this region as an obstacle
     if (props.region) props.region._removed = true;
     if (typeof props.onDeleteRegion === "function") props.onDeleteRegion();
-    else if (props.region && typeof props.region.remove === "function") props.region.remove();
+    else if (props.region && typeof props.region.remove === "function")
+      props.region.remove();
   } catch (e) {}
 }
 
 function doAddLeft() {
   menuOpen.value = false;
   try {
-    if (canAddLeft.value && typeof props.onAddRegionLeft === "function") props.onAddRegionLeft();
+    if (canAddLeft.value && typeof props.onAddRegionLeft === "function")
+      props.onAddRegionLeft();
   } catch (e) {}
 }
 
 function doAddRight() {
   menuOpen.value = false;
   try {
-    if (canAddRight.value && typeof props.onAddRegionRight === "function") props.onAddRegionRight();
+    if (canAddRight.value && typeof props.onAddRegionRight === "function") {
+      let initial = undefined;
+      try {
+        const m = (label.value || "").match(/^(\d+)-/);
+        if (m) {
+          const n = parseInt(m[1], 10) + 1;
+          initial = `${n}-`;
+        }
+      } catch (e) {}
+      props.onAddRegionRight(initial);
+    }
   } catch (e) {}
 }
 
@@ -109,15 +173,16 @@ onMounted(() => {
 
   // Watch textarea value and sync back to region
   watch(label, (v) => {
+    // Update r.data.label FIRST so that any synchronous region-updated event
+    // fired by setOptions sees the new value and doesn't clobber it back.
     try {
-      if (r.data && r.data.label === v) return;
+      r.data = Object.assign({}, r.data, { label: v });
+    } catch (e) {}
+    try {
       // Ensure the wavesurfer region does NOT render the label text in its
       // default content area. The authoritative text is the RegionLabel input
       // which is synced to the ground truth. So clear region.content here.
       if (typeof r.setOptions === "function") r.setOptions({ content: "" });
-    } catch (e) {}
-    try {
-      r.data = Object.assign({}, r.data, { label: v });
     } catch (e) {}
     if (typeof props.onLabelUpdate === "function") {
       try {
@@ -188,8 +253,24 @@ onMounted(() => {
   );
 
   // Watch incoming canAdd props so UI enables/disables buttons
-  watch(() => props.canAddLeft, (v) => { canAddLeft = !!v; });
-  watch(() => props.canAddRight, (v) => { canAddRight = !!v; });
+  watch(
+    () => props.canAddLeft,
+    (v) => {
+      try { canAddLeft.value = !!v; } catch (e) {}
+    },
+  );
+  watch(
+    () => props.canAddRight,
+    (v) => {
+      try { canAddRight.value = !!v; } catch (e) {}
+    },
+  );
+  watch(
+    () => props.showExtendedCommands,
+    (v) => {
+      try { showExtendedCommands.value = !!v; } catch (e) {}
+    },
+  );
 
   function toggleMenu() {
     menuOpen.value = !menuOpen.value;
@@ -202,18 +283,33 @@ onMounted(() => {
       // stop treating this region as an obstacle
       if (props.region) props.region._removed = true;
       if (typeof props.onDeleteRegion === "function") props.onDeleteRegion();
-      else if (props.region && typeof props.region.remove === "function") props.region.remove();
+      else if (props.region && typeof props.region.remove === "function")
+        props.region.remove();
     } catch (e) {}
   }
 
   function doAddLeft() {
     menuOpen.value = false;
-    try { if (typeof props.onAddRegionLeft === 'function') props.onAddRegionLeft(); } catch (e) {}
+    try {
+      if (typeof props.onAddRegionLeft === "function") props.onAddRegionLeft();
+    } catch (e) {}
   }
 
   function doAddRight() {
     menuOpen.value = false;
-    try { if (typeof props.onAddRegionRight === 'function') props.onAddRegionRight(); } catch (e) {}
+    try {
+      if (typeof props.onAddRegionRight === "function") {
+        let initial = undefined;
+        try {
+          const m = (label.value || "").match(/^(\d+)-/);
+          if (m) {
+            const n = parseInt(m[1], 10) + 1;
+            initial = `${n}-`;
+          }
+        } catch (e) {}
+        props.onAddRegionRight(initial);
+      }
+    } catch (e) {}
   }
 
   onBeforeUnmount(() => {
@@ -231,8 +327,8 @@ onMounted(() => {
   position: absolute;
   right: 6px;
   top: 28px;
-  background: rgba(20,20,20,0.95);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -247,9 +343,12 @@ onMounted(() => {
   text-align: left;
   cursor: pointer;
 }
-.menu-item:disabled { opacity: 0.4; cursor: not-allowed; }
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 </style>
- 
+
 <style scoped>
 .region-vue {
   height: 5em;
@@ -444,7 +543,7 @@ onMounted(() => {
   cursor: move;
   opacity: 1;
 }
-.handle-bottom:hover{
-    background-color: red;
+.handle-bottom:hover {
+  background-color: red;
 }
 </style>

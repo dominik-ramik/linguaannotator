@@ -1,5 +1,32 @@
 <template>
   <div class="editor">
+    <!-- ── Drop overlay ──────────────────────────────────────────────── -->
+    <transition name="drop-fade">
+      <div v-if="isDragOver" class="drop-overlay">
+        <v-icon icon="mdi-file-arrow-down-outline" size="64" color="primary" />
+        <div class="text-h6 mt-3">Drop to load</div>
+      </div>
+    </transition>
+
+    <!-- ── Unsupported file dialog ────────────────────────────────────── -->
+    <v-dialog v-model="unsupportedFileDialog" max-width="400">
+      <v-card rounded="lg">
+        <v-card-title class="pt-5 ps-6">Unsupported file type</v-card-title>
+        <v-card-text class="ps-6 pe-6">
+          Only audio&nbsp;/&nbsp;video files and <strong>.txt</strong> label
+          files can be dropped here.
+        </v-card-text>
+        <v-card-actions class="px-6 pb-5 justify-end">
+          <v-btn
+            variant="flat"
+            color="primary"
+            @click="unsupportedFileDialog = false"
+            >OK</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
     <v-toolbar color="surface" :elevation="1" class="px-2 mt-4 mb-4">
       <!-- File group -->
@@ -81,6 +108,13 @@
         >Add new label</v-btn
       >
 
+      <v-switch
+        v-model="showExtendedCommands"
+        label="Show label commands"
+        class="mx-2 mt-5"
+        :disabled="!waveReady"
+      />
+
       <v-spacer />
 
       <!-- Secondary -->
@@ -150,11 +184,22 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- ── Toast ─────────────────────────────────────────────────────── -->
+    <v-snackbar
+      v-model="toast.show"
+      :color="toast.color"
+      location="bottom center"
+      :timeout="3000"
+      rounded="pill"
+    >
+      <v-icon :icon="toast.icon" class="mr-2" />{{ toast.text }}
+    </v-snackbar>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, createApp } from "vue";
+import { ref, reactive, watch, onMounted, onBeforeUnmount, createApp } from "vue";
 import WaveSurfer from "wavesurfer.js";
 // Import Wavesurfer plugins as ESM modules for bundlers
 // Use the ESM builds which Vite can resolve
@@ -174,6 +219,8 @@ const regionsPlugin = ref(null);
 /* --- Hidden file input refs and trigger helpers --- */
 const audioFileInput = ref(null);
 const labelFileInput = ref(null);
+const isDragOver = ref(false);
+const unsupportedFileDialog = ref(false);
 function triggerAudioPick() {
   try {
     if (audioFileInput.value) {
@@ -203,6 +250,20 @@ const showOverlay = ref(false);
 const ioText = ref("");
 const waveReady = ref(false);
 const loadingWave = ref(false);
+const showExtendedCommands = ref(false);
+
+const toast = reactive({ show: false, text: "", color: "success", icon: "mdi-check-circle-outline" });
+let _toastTimer = null;
+function showToast(text, { color = "success", icon = "mdi-check-circle-outline" } = {}) {
+  if (_toastTimer) clearTimeout(_toastTimer);
+  toast.text = text;
+  toast.color = color;
+  toast.icon = icon;
+  toast.show = true;
+  _toastTimer = setTimeout(() => { toast.show = false; }, 3200);
+}
+
+let pendingAudioName = "";
 
 function createUid() {
   return `gt-${Math.random().toString(36).slice(2, 10)}`;
@@ -261,10 +322,21 @@ function ensureGroundTruthEntry(region, labelOverride) {
     if (typeof region.setOptions === "function")
       region.setOptions({ content: "" });
   } catch (e) {}
-  // If a RegionLabel component is mounted, ensure its input shows the label
   try {
     if (region && region.__vueInstance && "label" in region.__vueInstance) {
-      region.__vueInstance.label = entry.label;
+      if (typeof labelOverride === "string" && labelOverride.length) {
+        // Authoritative label supplied (import / adjacent-add): push it into
+        // the component so the textbox shows the correct value.
+        if (region.__vueInstance.label !== entry.label)
+          region.__vueInstance.label = entry.label;
+      } else {
+        // No override (resize / drag → region-updated): the component is the
+        // source of truth for what the user typed. Read it back so we don't
+        // clobber in-progress edits.
+        const liveLabel = region.__vueInstance.label;
+        if (typeof liveLabel === "string" && liveLabel !== entry.label)
+          entry.label = liveLabel;
+      }
     }
   } catch (err) {
     /* ignore */
@@ -344,9 +416,9 @@ function logGroundTruth() {
   );
 }
 
-function onFile(e) {
-  const file = e.target.files[0];
+function loadAudioFile(file) {
   if (!file) return;
+  pendingAudioName = file.name;
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -356,6 +428,10 @@ function onFile(e) {
     loadingWave.value = true;
   } catch (err) {}
   wavesurfer.value.load(URL.createObjectURL(file));
+}
+
+function onFile(e) {
+  loadAudioFile(e.target.files[0]);
 }
 
 function onZoom() {
@@ -444,7 +520,8 @@ function recomputeAllCanAdd() {
   });
 }
 
-function addAdjacentRegion(side, baseRegion) {
+function addAdjacentRegion(side, baseRegion, initialLabel) {
+  console.log("Attempting to add adjacent region on", side, "of", baseRegion, "with label", initialLabel);
   if (!regionsPlugin.value || !baseRegion) return false;
   const dur =
     wavesurfer.value && typeof wavesurfer.value.getDuration === "function"
@@ -464,11 +541,34 @@ function addAdjacentRegion(side, baseRegion) {
       if (!(re <= start || rs >= end)) return false;
     }
     try {
-      regionsPlugin.value.addRegion({
+      const uid = createUid();
+      const lbl = initialLabel || "Text";
+      importingEntries.set(uid, { label: lbl });
+      const newReg = regionsPlugin.value.addRegion({
         start,
         end,
-        data: { label: "Text", uid: createUid() },
+        data: { label: lbl, uid },
       });
+      // Belt-and-suspenders: WaveSurfer may fire region-created before
+      // applying data, so guarantee the label a tick later.
+      setTimeout(() => {
+        try {
+          const reg = newReg ||
+            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          if (!reg) return;
+          // Ensure region data has the label
+          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          // Fix groundTruth entry
+          const gtEntry = groundTruth.find((e) => e.uid === uid);
+          if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
+          // Fix mounted component input
+          if (reg.__vueInstance && "label" in reg.__vueInstance &&
+              reg.__vueInstance.label !== lbl) {
+            reg.__vueInstance.label = lbl;
+          }
+        } catch (_) {}
+        importingEntries.delete(uid);
+      }, 0);
       return true;
     } catch (e) {
       return false;
@@ -487,11 +587,34 @@ function addAdjacentRegion(side, baseRegion) {
       if (!(re <= start || rs >= end)) return false;
     }
     try {
-      regionsPlugin.value.addRegion({
+      const uid = createUid();
+      const lbl = initialLabel || "Text";
+      importingEntries.set(uid, { label: lbl });
+      const newReg = regionsPlugin.value.addRegion({
         start,
         end,
-        data: { label: "Text", uid: createUid() },
+        data: { label: lbl, uid },
       });
+      // Belt-and-suspenders: WaveSurfer may fire region-created before
+      // applying data, so guarantee the label a tick later.
+      setTimeout(() => {
+        try {
+          const reg = newReg ||
+            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          if (!reg) return;
+          // Ensure region data has the label
+          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          // Fix groundTruth entry
+          const gtEntry = groundTruth.find((e) => e.uid === uid);
+          if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
+          // Fix mounted component input
+          if (reg.__vueInstance && "label" in reg.__vueInstance &&
+              reg.__vueInstance.label !== lbl) {
+            reg.__vueInstance.label = lbl;
+          }
+        } catch (_) {}
+        importingEntries.delete(uid);
+      }, 0);
       return true;
     } catch (e) {
       return false;
@@ -500,30 +623,62 @@ function addAdjacentRegion(side, baseRegion) {
   return false;
 }
 
-function onLabelFile(e) {
-  const file = e.target.files[0];
+function loadLabelFile(file) {
   if (!file) return;
   // If there are existing labels, warn the user that loading will clear them
   if (groundTruth.length > 0) {
     const ok = window.confirm(
       "There are existing labels. Loading a label file will remove all current labels. Do you want to proceed?",
     );
-    if (!ok) {
-      // reset file input so the user can re-select later
-      try {
-        e.target.value = "";
-      } catch (err) {}
-      return;
-    }
+    if (!ok) return;
   }
+  const labelName = file.name;
   const reader = new FileReader();
   reader.onload = () => {
     const text = reader.result;
     if (typeof text === "string") {
       importLabelsFromText(text);
+      showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
     }
   };
   reader.readAsText(file);
+}
+
+function onLabelFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  // Reset input upfront so the same file can be re-selected later
+  try { e.target.value = ""; } catch (err) {}
+  loadLabelFile(file);
+}
+
+function handleDocDragOver(e) {
+  e.preventDefault();
+  isDragOver.value = true;
+}
+
+function handleDocDragLeave(e) {
+  // Only clear when leaving the browser viewport entirely
+  if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+    isDragOver.value = false;
+  }
+}
+
+function handleDocDrop(e) {
+  e.preventDefault();
+  isDragOver.value = false;
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  if (file.type.startsWith("audio/") || file.type.startsWith("video/")) {
+    loadAudioFile(file);
+  } else if (
+    file.name.toLowerCase().endsWith(".txt") ||
+    file.type === "text/plain"
+  ) {
+    loadLabelFile(file);
+  } else {
+    unsupportedFileDialog.value = true;
+  }
 }
 
 function deleteRegion(id) {
@@ -752,6 +907,10 @@ onMounted(() => {
   wavesurfer.value.on("ready", () => {
     waveReady.value = true;
     try { loadingWave.value = false; } catch (e) {}
+    if (pendingAudioName) {
+      showToast(`Loaded: ${pendingAudioName}`, { icon: "mdi-waveform" });
+      pendingAudioName = "";
+    }
     if (regionsPlugin.value) {
       regionsPlugin.value
         .getRegions()
@@ -806,9 +965,11 @@ onMounted(() => {
 
   // region events
   regionsPlugin.value.on("region-created", (r) => {
-    // If this region was created during import, get the label from the importing map
+    // If this region was created during import or adjacent-add, get the label
+    // from the importing map and immediately clean up the entry so it doesn't linger.
     const importedEntry =
       r.data && r.data.uid ? importingEntries.get(r.data.uid) : null;
+    if (importedEntry && r.data && r.data.uid) importingEntries.delete(r.data.uid);
     const labelOverride = importedEntry ? importedEntry.label : undefined;
     const entry = ensureGroundTruthEntry(r, labelOverride);
     if (!entry) return;
@@ -831,18 +992,23 @@ onMounted(() => {
             r.remove();
           } catch (e) {}
         },
-        onAddRegionLeft: () => {
-          addAdjacentRegion("left", r);
+        onAddRegionLeft: (initialLabel) => {
+          addAdjacentRegion("left", r, initialLabel);
         },
-        onAddRegionRight: () => {
-          addAdjacentRegion("right", r);
+        onAddRegionRight: (initialLabel) => {
+          addAdjacentRegion("right", r, initialLabel);
         },
+            showExtendedCommands: showExtendedCommands.value,
         canAddLeft: computeCanAddAdjacent(r).canLeft,
         canAddRight: computeCanAddAdjacent(r).canRight,
       });
       const instance = app.mount(mountEl);
       r.__vueApp = app;
       r.__vueInstance = instance;
+      // Ensure the instance receives the current showExtendedCommands flag
+      try {
+        if (instance) instance.showExtendedCommands = showExtendedCommands.value;
+      } catch (e) {}
       // ensure instance flags are set on the mounted instance
       try {
         const flags = computeCanAddAdjacent(r);
@@ -870,6 +1036,18 @@ onMounted(() => {
       setupRegionDOM(r, attachDrag);
     }
   });
+
+function updateAllShowExtended() {
+  if (!regionsPlugin.value) return;
+  const regs = regionsPlugin.value.getRegions().filter((r) => r && r.__vueInstance);
+  regs.forEach((r) => {
+    try {
+      r.__vueInstance.showExtendedCommands = showExtendedCommands.value;
+    } catch (e) {}
+  });
+}
+
+watch(showExtendedCommands, () => updateAllShowExtended());
 
   regionsPlugin.value.on("region-updated", (region) => {
     ensureGroundTruthEntry(region);
@@ -900,6 +1078,10 @@ onMounted(() => {
       refreshIoTextFromGroundTruth();
     } catch (e) {}
   });
+
+  document.addEventListener("dragover", handleDocDragOver);
+  document.addEventListener("dragleave", handleDocDragLeave);
+  document.addEventListener("drop", handleDocDrop);
 });
 
 onBeforeUnmount(() => {
@@ -908,6 +1090,9 @@ onBeforeUnmount(() => {
   try {
     window.removeEventListener("keydown", globalPlayPause);
   } catch (e) {}
+  document.removeEventListener("dragover", handleDocDragOver);
+  document.removeEventListener("dragleave", handleDocDragLeave);
+  document.removeEventListener("drop", handleDocDrop);
   if (wavesurfer.value) wavesurfer.value.destroy();
 });
 
@@ -927,5 +1112,30 @@ onBeforeUnmount(() => {
   font-family: "Consolas", "Monaco", monospace;
   font-size: 13px;
   line-height: 1.65;
+}
+.editor {
+  position: relative;
+}
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border: 2px dashed rgb(var(--v-theme-primary));
+  pointer-events: none;
+  color: rgb(var(--v-theme-primary));
+}
+.drop-fade-enter-active,
+.drop-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.drop-fade-enter-from,
+.drop-fade-leave-to {
+  opacity: 0;
 }
 </style>
