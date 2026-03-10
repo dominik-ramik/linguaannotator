@@ -1,4 +1,4 @@
-export function createAttachDrag(wavesurferRef, regionsPluginRef, onRegionChanged) {
+export function createAttachDrag(wavesurferRef, regionsPluginRef, onRegionChanged, onDragEdit) {
   // Returns a function attachDrag(domEl, region, mode)
   return function attachDrag(domEl, region, mode) {
     domEl.addEventListener("mousedown", (e) => {
@@ -116,6 +116,10 @@ export function createAttachDrag(wavesurferRef, regionsPluginRef, onRegionChange
         } catch (err) {
           // ignore callback errors
         }
+        // Track only the primary dragged region as edited (not rippled ones).
+        try {
+          if (typeof onDragEdit === 'function') onDragEdit(region);
+        } catch (_) {}
       };
 
       window.addEventListener("mousemove", onMove);

@@ -1,8 +1,55 @@
-const BACKUP_INTERVAL_MS = 30000; // 30 seconds
+export const BACKUP_INTERVAL_MS = 30000; // 30 seconds
 const MAX_BACKUPS = 10;
 const BACKUP_KEY_PREFIX = 'lingua_backup_';
+const MAX_RECENT_EDITS = 3;
 let backupTimer = null;
 let lastBackupSnapshot = null;
+const currentFileNames = { audio: '', labels: '' };
+
+/**
+ * Update the filenames that will be stored in every subsequent backup.
+ */
+export function setBackupFileNames(audio, labels) {
+  currentFileNames.audio = audio || '';
+  currentFileNames.labels = labels || '';
+}
+
+/**
+ * Rolling list of the most recently edited labels (max MAX_RECENT_EDITS).
+ * Each entry is a string key "position:text" where position is the 1-based
+ * sort-order index of the label among all labels.
+ */
+const recentEdits = [];
+
+/**
+ * Track a label edit.  Call this when a label is moved, resized or renamed.
+ * @param {number} position  1-based sort-order position of the label.
+ * @param {string} text      Current text of the label.
+ */
+export function trackLabelEdit(position, text) {
+  const key = `${position}:${text}`;
+  // Remove any existing entry for this position (regardless of its text),
+  // so successive renames of the same label count as a single edit.
+  const posPrefix = `${position}:`;
+  const idx = recentEdits.findIndex(e => e === key || e.startsWith(posPrefix));
+  if (idx !== -1) recentEdits.splice(idx, 1);
+  recentEdits.push(key);
+  // Trim to constant length.
+  while (recentEdits.length > MAX_RECENT_EDITS) recentEdits.shift();
+}
+
+/**
+ * Save a backup immediately (e.g. right after a label file is imported).
+ * lastEditedLabels will be empty since this is a baseline, not an edit session.
+ * Updates the snapshot so the periodic timer won't fire again for the same data.
+ * Does nothing if groundTruth is empty.
+ */
+export function saveImmediateBackup(groundTruth) {
+  if (!groundTruth || groundTruth.length === 0) return;
+  // Clear any edits that accumulated during import — they are not real user edits.
+  recentEdits.length = 0;
+  saveBackupToLocalStorage(groundTruth);
+}
 
 /**
  * Produce a deterministic serialization of groundTruth for change detection.
@@ -14,41 +61,6 @@ function serializeGroundTruth(groundTruth) {
     end: e.end,
     label: e.label
   })));
-}
-
-/**
- * Determine the 3 most recently edited labels by diffing against the previous
- * snapshot.  Falls back to the last 3 labels when no previous snapshot exists.
- */
-function computeLastEditedLabels(currentGT, previousSnapshot) {
-  const sorted = [...currentGT].sort((a, b) => (a.start || 0) - (b.start || 0));
-
-  if (!previousSnapshot) {
-    return sorted.slice(-3).map(e => e.label || '').reverse();
-  }
-
-  try {
-    const prev = JSON.parse(previousSnapshot);
-    const prevMap = new Map();
-    prev.forEach(e => {
-      const key = `${Number(e.start).toFixed(6)}_${Number(e.end).toFixed(6)}`;
-      prevMap.set(key, e.label);
-    });
-
-    const changed = [];
-    sorted.forEach(e => {
-      const key = `${Number(e.start).toFixed(6)}_${Number(e.end).toFixed(6)}`;
-      const prevLabel = prevMap.get(key);
-      if (prevLabel === undefined || prevLabel !== e.label) {
-        changed.push(e.label || '');
-      }
-    });
-
-    if (changed.length > 0) return changed.slice(-3).reverse();
-    return sorted.slice(-3).map(e => e.label || '').reverse();
-  } catch {
-    return sorted.slice(-3).map(e => e.label || '').reverse();
-  }
 }
 
 /**
@@ -81,12 +93,16 @@ function saveBackupToLocalStorage(groundTruth) {
     }
 
     const timestamp = Date.now();
-    const lastEditedLabels = computeLastEditedLabels(groundTruth, lastBackupSnapshot);
+    // Snapshot the running recent-edits list and clear it for the next interval.
+    const lastEditedLabels = recentEdits.slice();
+    recentEdits.length = 0;
 
     const backupData = {
       timestamp,
       labelCount: groundTruth.length,
       lastEditedLabels,
+      audioFileName: currentFileNames.audio,
+      labelFileName: currentFileNames.labels,
       groundTruth: [...groundTruth]
         .sort((a, b) => (a.start || 0) - (b.start || 0))
         .map(entry => ({ ...entry }))
@@ -119,6 +135,7 @@ function saveBackupToLocalStorage(groundTruth) {
 
 export function startAutoBackup(groundTruthRef) {
   initLastSnapshot();
+  recentEdits.length = 0;
   if (backupTimer) clearInterval(backupTimer);
   backupTimer = setInterval(() => {
     try {
@@ -152,6 +169,8 @@ export function getBackups() {
           timestamp: data.timestamp || 0,
           labelCount: data.labelCount || (data.groundTruth ? data.groundTruth.length : 0),
           lastEditedLabels: data.lastEditedLabels || [],
+          audioFileName: data.audioFileName || '',
+          labelFileName: data.labelFileName || '',
         };
       } catch {
         return null;

@@ -208,7 +208,7 @@ import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.esm.js";
 import RegionLabel from "./RegionLabel.vue";
 import { createAttachDrag } from "./wave-editor/drag.js";
 import { setupRegionDOM } from "./wave-editor/regionDom.js";
-import { startAutoBackup, stopAutoBackup } from "./wave-editor/backup.js";
+import { startAutoBackup, stopAutoBackup, trackLabelEdit, setBackupFileNames, saveImmediateBackup } from "./wave-editor/backup.js";
 
 const emit = defineEmits(["update-files"]);
 
@@ -251,6 +251,7 @@ const zoom = ref(100);
 const groundTruth = reactive([]);
 const importingEntries = new Map(); // Temporary map during import: uid -> entry
 const importingRegions = new Map(); // Temporary map during import: uid -> region instance
+let isImporting = false; // True while importLabelsFromText is running
 
 const showOverlay = ref(false);
 const ioText = ref("");
@@ -384,6 +385,14 @@ function updateGroundTruthLabel(uid, label) {
   const entry = groundTruth.find((item) => item.uid === uid);
   if (!entry) return;
   entry.label = label;
+  // Track as edited — skip during label file imports
+  if (!isImporting) {
+    try {
+      const sorted = [...groundTruth].sort((a, b) => (a.start || 0) - (b.start || 0));
+      const pos = sorted.findIndex(e => e.uid === uid) + 1;
+      if (pos > 0) trackLabelEdit(pos, label);
+    } catch (_) {}
+  }
   // Also update mounted component if present
   try {
     const region = regionsPlugin.value
@@ -428,6 +437,7 @@ function loadAudioFile(file) {
   // store filename for UI reference
   try { audioFileName.value = file.name; } catch (e) {}
   try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
+  try { setBackupFileNames(audioFileName.value, labelFileName.value); } catch (e) {}
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -650,6 +660,7 @@ function loadLabelFile(file) {
       // store label filename for UI reference
       try { labelFileName.value = labelName; } catch (e) {}
       try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
+      try { setBackupFileNames(audioFileName.value, labelFileName.value); } catch (e) {}
       showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
     }
   };
@@ -768,6 +779,7 @@ function exportLabels() {
 
 async function importLabelsFromText(raw) {
   if (!regionsPlugin.value) return;
+  isImporting = true;
   const entries = [];
   raw.split(/\r?\n/).forEach((line) => {
     if (!line.trim()) return;
@@ -823,6 +835,7 @@ async function importLabelsFromText(raw) {
 
   if (entries.length === 0) {
     refreshIoTextFromGroundTruth();
+    isImporting = false;
     return;
   }
 
@@ -903,6 +916,10 @@ async function importLabelsFromText(raw) {
   importingEntries.clear();
   importingRegions.clear();
   refreshIoTextFromGroundTruth();
+  isImporting = false;
+  // Immediately save a baseline backup (empty lastEditedLabels).
+  // This also updates the snapshot so the interval won't fire for unedited data.
+  try { saveImmediateBackup(groundTruth); } catch (_) {}
 }
 
 onMounted(() => {
@@ -934,6 +951,17 @@ onMounted(() => {
     } catch (err) {
       /* ignore */
     }
+  }, (r) => {
+    // Track the primary dragged/resized region as edited.
+    try {
+      const uid = r.data && r.data.uid;
+      if (!uid) return;
+      const entry = groundTruth.find(e => e.uid === uid);
+      if (!entry) return;
+      const sorted = [...groundTruth].sort((a, b) => (a.start || 0) - (b.start || 0));
+      const pos = sorted.findIndex(e => e.uid === uid) + 1;
+      if (pos > 0) trackLabelEdit(pos, entry.label || '');
+    } catch (_) {}
   });
 
   wavesurfer.value.on("ready", () => {

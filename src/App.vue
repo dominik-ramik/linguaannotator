@@ -135,7 +135,7 @@
               class="text-body-small text-medium-emphasis"
             >
               No backups yet. Backups are saved automatically every
-              60&nbsp;seconds when labels change.
+              {{ backupIntervalText }} when labels change.
             </div>
             <v-sheet
               v-else
@@ -165,6 +165,12 @@
                       {{ formatBackupDate(backup.timestamp) }}
                     </v-list-item-title>
                     <v-list-item-subtitle class="text-caption" style="white-space: normal; opacity: 1;">
+                      <template v-if="backup.audioFileName || backup.labelFileName">
+                        <span v-if="backup.audioFileName">Audio: {{ backup.audioFileName }}</span>
+                        <span v-if="backup.audioFileName && backup.labelFileName"> &middot; </span>
+                        <span v-if="backup.labelFileName">Labels: {{ backup.labelFileName }}</span>
+                        <br />
+                      </template>
                       {{ backup.labelCount }}
                       label{{ backup.labelCount !== 1 ? 's' : '' }}
                       <template
@@ -178,7 +184,7 @@
                           <li
                             v-for="lbl in backup.lastEditedLabels"
                             :key="lbl"
-                          >{{ lbl }}</li>
+                          >{{ lbl.split(':').slice(1).join(':') }} <span class="text-medium-emphasis">(#{{ lbl.split(':')[0] }})</span></li>
                         </ul>
                       </template>
                     </v-list-item-subtitle>
@@ -251,10 +257,22 @@ import { version } from "../package.json";
 import {
   getBackups,
   downloadBackup,
+  BACKUP_INTERVAL_MS,
 } from "./components/wave-editor/backup.js";
 
 const backups = ref([]);
 let backupRefreshTimer = null;
+function formatInterval(ms) {
+  const s = Math.round(ms / 1000);
+  if (s >= 60) {
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    if (rem === 0) return `${m} minute${m > 1 ? 's' : ''}`;
+    return `${m} minute${m > 1 ? 's' : ''} ${rem} second${rem > 1 ? 's' : ''}`;
+  }
+  return `${s} second${s > 1 ? 's' : ''}`;
+}
+const backupIntervalText = formatInterval(BACKUP_INTERVAL_MS);
 const currentAudio = ref("");
 const currentLabelFile = ref("");
 
