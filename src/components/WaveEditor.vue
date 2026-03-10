@@ -735,7 +735,27 @@ function downloadLabels() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `labels_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.txt`;
+  // Use original label filename if available, append timestamp before extension
+  try {
+    const original = labelFileName && labelFileName.value ? labelFileName.value : null;
+    const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+    let outName;
+    if (original && original.length) {
+      const idx = original.lastIndexOf(".");
+      if (idx > 0) {
+        const base = original.slice(0, idx);
+        const ext = original.slice(idx);
+        outName = `${base}_${ts}${ext}`;
+      } else {
+        outName = `${original}_${ts}.txt`;
+      }
+    } else {
+      outName = `labels_${ts}.txt`;
+    }
+    a.download = outName;
+  } catch (e) {
+    a.download = `labels_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.txt`;
+  }
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -921,6 +941,15 @@ onMounted(() => {
   wavesurfer.value.on("ready", () => {
     waveReady.value = true;
     try { loadingWave.value = false; } catch (e) {}
+    // Move cursor to the beginning of the file when a new audio/video is loaded
+    try {
+      if (wavesurfer.value && typeof wavesurfer.value.seekTo === "function") {
+        wavesurfer.value.seekTo(0);
+      } else if (wavesurfer.value && typeof wavesurfer.value.setCurrentTime === "function") {
+        wavesurfer.value.setCurrentTime(0);
+      }
+      if (wavesurfer.value && typeof wavesurfer.value.pause === "function") wavesurfer.value.pause();
+    } catch (e) {}
     if (pendingAudioName) {
       showToast(`Loaded: ${pendingAudioName}`, { icon: "mdi-waveform" });
       pendingAudioName = "";
