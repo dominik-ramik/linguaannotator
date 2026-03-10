@@ -140,6 +140,12 @@
     <!-- ── Waveform (untouched) ────────────────────────────────────────── -->
     <div id="timeline" class="timeline"></div>
     <div id="waveform" class="waveform"></div>
+    <div class="file-info" v-if="audioFileName || labelFileName">
+      <div class="file-info-inner">
+        <span class="file-name" v-if="audioFileName">Audio: {{ audioFileName }}</span>
+        <span class="file-name" v-if="labelFileName">Labels: {{ labelFileName }}</span>
+      </div>
+    </div>
 
     <!-- ── Labels dialog ──────────────────────────────────────────────── -->
     <v-dialog v-model="showOverlay" max-width="720" scrollable>
@@ -212,6 +218,10 @@ import { startAutoBackup, stopAutoBackup } from "./wave-editor/backup.js";
 
 const waveformEl = ref(null);
 const timelineEl = ref(null);
+
+// Displayed filenames for reference under the waveform
+const audioFileName = ref("");
+const labelFileName = ref("");
 
 const wavesurfer = ref(null);
 const regionsPlugin = ref(null);
@@ -419,6 +429,8 @@ function logGroundTruth() {
 function loadAudioFile(file) {
   if (!file) return;
   pendingAudioName = file.name;
+  // store filename for UI reference
+  try { audioFileName.value = file.name; } catch (e) {}
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -638,6 +650,8 @@ function loadLabelFile(file) {
     const text = reader.result;
     if (typeof text === "string") {
       importLabelsFromText(text);
+      // store label filename for UI reference
+      try { labelFileName.value = labelName; } catch (e) {}
       showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
     }
   };
@@ -1137,5 +1151,22 @@ onBeforeUnmount(() => {
 .drop-fade-enter-from,
 .drop-fade-leave-to {
   opacity: 0;
+}
+
+.file-info {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+.file-info-inner {
+  text-align: center;
+  font-size: 12px;
+  color: rgb(var(--v-theme-medium-emphasis));
+}
+.file-info .file-name {
+  display: inline-block;
+}
+.file-info .file-name + .file-name {
+  margin-left: 12px;
 }
 </style>
