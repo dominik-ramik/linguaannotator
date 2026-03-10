@@ -140,12 +140,6 @@
     <!-- ── Waveform (untouched) ────────────────────────────────────────── -->
     <div id="timeline" class="timeline"></div>
     <div id="waveform" class="waveform"></div>
-    <div class="file-info" v-if="audioFileName || labelFileName">
-      <div class="file-info-inner">
-        <span class="file-name" v-if="audioFileName">Audio: {{ audioFileName }}</span>
-        <span class="file-name" v-if="labelFileName">Labels: {{ labelFileName }}</span>
-      </div>
-    </div>
 
     <!-- ── Labels dialog ──────────────────────────────────────────────── -->
     <v-dialog v-model="showOverlay" max-width="720" scrollable>
@@ -205,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted, onBeforeUnmount, createApp } from "vue";
+import { ref, reactive, watch, onMounted, onBeforeUnmount, createApp, defineEmits } from "vue";
 import WaveSurfer from "wavesurfer.js";
 // Import Wavesurfer plugins as ESM modules for bundlers
 // Use the ESM builds which Vite can resolve
@@ -215,6 +209,8 @@ import RegionLabel from "./RegionLabel.vue";
 import { createAttachDrag } from "./wave-editor/drag.js";
 import { setupRegionDOM } from "./wave-editor/regionDom.js";
 import { startAutoBackup, stopAutoBackup } from "./wave-editor/backup.js";
+
+const emit = defineEmits(["update-files"]);
 
 const waveformEl = ref(null);
 const timelineEl = ref(null);
@@ -431,6 +427,7 @@ function loadAudioFile(file) {
   pendingAudioName = file.name;
   // store filename for UI reference
   try { audioFileName.value = file.name; } catch (e) {}
+  try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -652,6 +649,7 @@ function loadLabelFile(file) {
       importLabelsFromText(text);
       // store label filename for UI reference
       try { labelFileName.value = labelName; } catch (e) {}
+      try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
       showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
     }
   };

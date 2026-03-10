@@ -18,12 +18,12 @@
       </v-toolbar>
     </header>
 
-    <WaveEditor class="mb-2" />
+    <WaveEditor class="mb-2" @update-files="onUpdateFiles" />
     <main class="scrollable-content">
-      <v-container max-width="780" class="mt-0 mb-10">
-        <v-card rounded="lg">
+      <v-container class="mt-0 mb-10 d-flex flex-row align-start">
+        <v-card width="640" rounded="lg">
           <v-card-title
-            class="text-overline text-primary pt-5 ps-6 pb-1 system-font"
+            class="text-overline text-primary pt-5 ps-6 pb-1 system-font mb-6"
           >
             How to use
           </v-card-title>
@@ -105,6 +105,99 @@
             </v-alert>
           </v-card-text>
         </v-card>
+
+        <!-- ── Backups ──────────────────────────────────────────────────── -->
+        <v-card width="640" rounded="lg" class="ml-5">
+          <v-card-title
+            class="text-overline text-primary pt-5 ps-6 pb-1 system-font"
+          >
+            Currently loaded files
+          </v-card-title>
+          <v-card-text class="ps-6 pe-6 pb-4 pt-1">
+            <div class="text-caption">
+              <template v-if="currentAudio || currentLabelFile">
+                <span v-if="currentAudio"><b>Audio:</b> {{ currentAudio }}</span>
+                <span v-if="currentAudio && currentLabelFile"> &middot; </span>
+                <span v-if="currentLabelFile"><b>Labels:</b> {{ currentLabelFile }}</span>
+              </template>
+              <span v-else class="text-medium-emphasis">None</span>
+            </div>
+          </v-card-text>
+          <v-divider />
+          <v-card-title
+            class="text-overline text-primary pt-4 ps-6 pb-1 system-font mb-4"
+          >
+            Backups
+          </v-card-title>
+          <v-card-text class="ps-6 pe-6 pb-5 pt-1">
+            <div
+              v-if="backups.length === 0"
+              class="text-body-small text-medium-emphasis"
+            >
+              No backups yet. Backups are saved automatically every
+              60&nbsp;seconds when labels change.
+            </div>
+            <v-sheet
+              v-else
+              rounded="lg"
+              color="surface-variant"
+              class="pa-1"
+            >
+              <v-list density="compact" bg-color="transparent" class="py-0">
+                <template
+                  v-for="(backup, idx) in backups"
+                  :key="backup.key"
+                >
+                  <v-list-item class="px-4 py-3" :lines="false">
+                    <template #prepend>
+                      <v-btn
+                        size="default"
+                        variant="tonal"
+                        color="secondary"
+                        prepend-icon="mdi-file-document-outline"
+                        class="mr-3"
+                        style="align-self: flex-start;"
+                        @click="handleDownloadBackup(backup.key)"
+                        title="Download backup as label file"
+                      >Download</v-btn>
+                    </template>
+                    <v-list-item-title class="text-body-small mb-1">
+                      {{ formatBackupDate(backup.timestamp) }}
+                    </v-list-item-title>
+                    <v-list-item-subtitle class="text-caption" style="white-space: normal; opacity: 1;">
+                      {{ backup.labelCount }}
+                      label{{ backup.labelCount !== 1 ? 's' : '' }}
+                      <template
+                        v-if="
+                          backup.lastEditedLabels &&
+                          backup.lastEditedLabels.length > 0
+                        "
+                      >
+                        <br />Last edited:
+                        <ul class="backup-edited-list">
+                          <li
+                            v-for="lbl in backup.lastEditedLabels"
+                            :key="lbl"
+                          >{{ lbl }}</li>
+                        </ul>
+                      </template>
+                    </v-list-item-subtitle>
+                  </v-list-item>
+                  <v-divider v-if="idx < backups.length - 1" />
+                </template>
+              </v-list>
+            </v-sheet>
+            <v-alert
+              density="compact"
+              variant="tonal"
+              color="primary"
+              icon="mdi-lightbulb-outline"
+              class="mt-4"
+            >
+              <strong>Tip:</strong> Backups are stored in your browser and remain available after reloading the page.
+            </v-alert>
+          </v-card-text>
+        </v-card>
       </v-container>
     </main>
 
@@ -151,9 +244,50 @@
 </template>
 
 <script setup>
+import { ref, onMounted, onBeforeUnmount } from "vue";
 import { en } from "vuetify/locale";
 import WaveEditor from "./components/WaveEditor.vue";
 import { version } from "../package.json";
+import {
+  getBackups,
+  downloadBackup,
+} from "./components/wave-editor/backup.js";
+
+const backups = ref([]);
+let backupRefreshTimer = null;
+const currentAudio = ref("");
+const currentLabelFile = ref("");
+
+function onUpdateFiles(payload) {
+  currentAudio.value = payload.audioFileName || "";
+  currentLabelFile.value = payload.labelFileName || "";
+}
+
+function refreshBackups() {
+  backups.value = getBackups();
+}
+
+function formatBackupDate(timestamp) {
+  const d = new Date(timestamp);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function handleDownloadBackup(key) {
+  downloadBackup(key);
+}
+
+onMounted(() => {
+  refreshBackups();
+  backupRefreshTimer = setInterval(refreshBackups, 15000);
+});
+
+onBeforeUnmount(() => {
+  if (backupRefreshTimer) {
+    clearInterval(backupRefreshTimer);
+    backupRefreshTimer = null;
+  }
+});
 </script>
 
 <style>
@@ -206,5 +340,13 @@ footer {
   flex-direction: column;
   gap: 4px;
   color: rgba(255, 255, 255, 0.5);
+}
+.backup-edited-list {
+  margin: 2px 0 0 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  list-style: disc;
 }
 </style>
