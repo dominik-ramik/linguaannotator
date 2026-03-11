@@ -14,11 +14,12 @@ LinguaAnnotator is a lightweight, browser-based tool designed to make annotating
 
 * **100% Local Processing:** Your audio and video files are processed entirely in your browser. Nothing is uploaded to a server.
 * **Interactive Waveform:** Powered by WaveSurfer.js with smooth zooming and timeline navigation.
-* **Smart Region Handles:** * Trim and extend duration.
+* **Smart Region Handles:**
+  * Trim and extend duration.
   * Move regions freely.
   * **Ripple-move:** Push all subsequent regions to the right to maintain spacing.
 * **Flexible Import/Export:** Import Audacity-formatted labels or simple word lists (which auto-generate 3-second regions). Export back to standard `.txt` label files.
-* **Auto-backup:** Work safely knowing your current annotations are preserved in your local session.
+* **Auto-backup:** Annotations are automatically backed up to your browser's local storage (every 30 seconds when labels change). Up to 10 backups are kept and remain available after reloading the page. A baseline backup is created when you import a label file — see the **Backups** section below for full details and per-backup export.
 
 ## How to Use
 
@@ -44,6 +45,20 @@ To split your audio into individual files based on these labels using Audacity:
 1. Open your original audio file in [Audacity](https://www.audacityteam.org/).
 2. Go to **File → Import → Labels** and select your downloaded `.txt` file.
 3. Go to **File → Export → Export Multiple** and choose to split the files based on your labels. Audacity will automatically save each marked region as its own audio file.
+
+### 4. Backups
+LinguaAnnotator automatically backs up your work every 30 seconds, but only when the labels have actually changed since the last save. An immediate backup is also created the moment you import a label file.
+
+The **Backup panel** (visible on the right side of the page, next to the how-to guide) shows:
+* **Currently loaded files** — the active audio and label filenames at a glance.
+* **Backup history** — up to 10 entries listed from most to least recent, each showing:
+  * Exact date and time (including seconds).
+  * The audio and label filenames associated with that snapshot.
+  * Total number of labels in the snapshot.
+  * Up to 3 most recently edited labels (tracking moves, resizes, and renames — successive renames of the same label count as a single edit).
+* A **Download** button on each entry to export that snapshot as a standard `.txt` label file.
+
+Backups are stored in your browser's local storage and remain available after reloading the page.
 
 ## Author
 
