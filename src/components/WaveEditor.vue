@@ -81,23 +81,21 @@
         hide-details
         color="primary"
         class="ml-2 mr-3"
-        style="width: 120px; flex: none"
+        style="width: 170px; flex: none"
         @update:model-value="onZoom"
+        :disabled="!waveReady"
+        label="Zoom"
+      />
+
+      <v-switch
+        v-model="showExtendedCommands"
+        label="Show label commands"
+        class="mx-2 mt-5"
         :disabled="!waveReady"
       />
 
       <v-divider vertical class="mx-2" />
 
-      <!-- Actions -->
-      <v-btn
-        variant="tonal"
-        color="secondary"
-        prepend-icon="mdi-download-outline"
-        class="mr-1"
-        :disabled="!waveReady"
-        @click="downloadLabels"
-        >Download labels</v-btn
-      >
 
       <v-btn
         v-if="waveReady && groundTruth.length === 0"
@@ -108,25 +106,29 @@
         >Add new label</v-btn
       >
 
-      <v-switch
-        v-model="showExtendedCommands"
-        label="Show label commands"
-        class="mx-2 mt-5"
-        :disabled="!waveReady"
-      />
-
-      <v-spacer />
-
       <!-- Secondary -->
       <v-btn
         variant="tonal"
         color="secondary"
         prepend-icon="mdi-format-list-bulleted"
-        class="mr-1"
+        class="ml-2"
         :disabled="!waveReady"
         @click="openModal"
         >View labels</v-btn
       >
+
+      <!-- Actions -->
+      <v-btn
+        variant="elevated"
+        color="primary"
+        prepend-icon="mdi-download-outline"
+        class="ml-2"
+        :disabled="!waveReady"
+        @click="downloadLabels"
+        >Download labels</v-btn
+      >
+
+      <v-spacer />
 
       <v-btn
         variant="text"
@@ -199,7 +201,15 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted, onBeforeUnmount, createApp, defineEmits } from "vue";
+import {
+  ref,
+  reactive,
+  watch,
+  onMounted,
+  onBeforeUnmount,
+  createApp,
+  defineEmits,
+} from "vue";
 import WaveSurfer from "wavesurfer.js";
 // Import Wavesurfer plugins as ESM modules for bundlers
 // Use the ESM builds which Vite can resolve
@@ -208,7 +218,13 @@ import TimelinePlugin from "wavesurfer.js/dist/plugins/timeline.esm.js";
 import RegionLabel from "./RegionLabel.vue";
 import { createAttachDrag } from "./wave-editor/drag.js";
 import { setupRegionDOM } from "./wave-editor/regionDom.js";
-import { startAutoBackup, stopAutoBackup, trackLabelEdit, setBackupFileNames, saveImmediateBackup } from "./wave-editor/backup.js";
+import {
+  startAutoBackup,
+  stopAutoBackup,
+  trackLabelEdit,
+  setBackupFileNames,
+  saveImmediateBackup,
+} from "./wave-editor/backup.js";
 
 const emit = defineEmits(["update-files"]);
 
@@ -259,15 +275,25 @@ const waveReady = ref(false);
 const loadingWave = ref(false);
 const showExtendedCommands = ref(false);
 
-const toast = reactive({ show: false, text: "", color: "success", icon: "mdi-check-circle-outline" });
+const toast = reactive({
+  show: false,
+  text: "",
+  color: "success",
+  icon: "mdi-check-circle-outline",
+});
 let _toastTimer = null;
-function showToast(text, { color = "success", icon = "mdi-check-circle-outline" } = {}) {
+function showToast(
+  text,
+  { color = "success", icon = "mdi-check-circle-outline" } = {},
+) {
   if (_toastTimer) clearTimeout(_toastTimer);
   toast.text = text;
   toast.color = color;
   toast.icon = icon;
   toast.show = true;
-  _toastTimer = setTimeout(() => { toast.show = false; }, 3200);
+  _toastTimer = setTimeout(() => {
+    toast.show = false;
+  }, 3200);
 }
 
 let pendingAudioName = "";
@@ -388,8 +414,10 @@ function updateGroundTruthLabel(uid, label) {
   // Track as edited — skip during label file imports
   if (!isImporting) {
     try {
-      const sorted = [...groundTruth].sort((a, b) => (a.start || 0) - (b.start || 0));
-      const pos = sorted.findIndex(e => e.uid === uid) + 1;
+      const sorted = [...groundTruth].sort(
+        (a, b) => (a.start || 0) - (b.start || 0),
+      );
+      const pos = sorted.findIndex((e) => e.uid === uid) + 1;
       if (pos > 0) trackLabelEdit(pos, label);
     } catch (_) {}
   }
@@ -435,9 +463,18 @@ function loadAudioFile(file) {
   if (!file) return;
   pendingAudioName = file.name;
   // store filename for UI reference
-  try { audioFileName.value = file.name; } catch (e) {}
-  try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
-  try { setBackupFileNames(audioFileName.value, labelFileName.value); } catch (e) {}
+  try {
+    audioFileName.value = file.name;
+  } catch (e) {}
+  try {
+    emit("update-files", {
+      audioFileName: audioFileName.value || "",
+      labelFileName: labelFileName.value || "",
+    });
+  } catch (e) {}
+  try {
+    setBackupFileNames(audioFileName.value, labelFileName.value);
+  } catch (e) {}
   // Mark waveform as not-ready while loading a new file so UI controls
   // (zoom, load labels) stay disabled until Wavesurfer emits `ready`.
   try {
@@ -540,7 +577,14 @@ function recomputeAllCanAdd() {
 }
 
 function addAdjacentRegion(side, baseRegion, initialLabel) {
-  console.log("Attempting to add adjacent region on", side, "of", baseRegion, "with label", initialLabel);
+  console.log(
+    "Attempting to add adjacent region on",
+    side,
+    "of",
+    baseRegion,
+    "with label",
+    initialLabel,
+  );
   if (!regionsPlugin.value || !baseRegion) return false;
   const dur =
     wavesurfer.value && typeof wavesurfer.value.getDuration === "function"
@@ -572,17 +616,25 @@ function addAdjacentRegion(side, baseRegion, initialLabel) {
       // applying data, so guarantee the label a tick later.
       setTimeout(() => {
         try {
-          const reg = newReg ||
-            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          const reg =
+            newReg ||
+            regionsPlugin.value
+              .getRegions()
+              .find((r) => r.data && r.data.uid === uid);
           if (!reg) return;
           // Ensure region data has the label
-          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          try {
+            reg.data = Object.assign({}, reg.data, { uid, label: lbl });
+          } catch (_) {}
           // Fix groundTruth entry
           const gtEntry = groundTruth.find((e) => e.uid === uid);
           if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
           // Fix mounted component input
-          if (reg.__vueInstance && "label" in reg.__vueInstance &&
-              reg.__vueInstance.label !== lbl) {
+          if (
+            reg.__vueInstance &&
+            "label" in reg.__vueInstance &&
+            reg.__vueInstance.label !== lbl
+          ) {
             reg.__vueInstance.label = lbl;
           }
         } catch (_) {}
@@ -618,17 +670,25 @@ function addAdjacentRegion(side, baseRegion, initialLabel) {
       // applying data, so guarantee the label a tick later.
       setTimeout(() => {
         try {
-          const reg = newReg ||
-            regionsPlugin.value.getRegions().find((r) => r.data && r.data.uid === uid);
+          const reg =
+            newReg ||
+            regionsPlugin.value
+              .getRegions()
+              .find((r) => r.data && r.data.uid === uid);
           if (!reg) return;
           // Ensure region data has the label
-          try { reg.data = Object.assign({}, reg.data, { uid, label: lbl }); } catch (_) {}
+          try {
+            reg.data = Object.assign({}, reg.data, { uid, label: lbl });
+          } catch (_) {}
           // Fix groundTruth entry
           const gtEntry = groundTruth.find((e) => e.uid === uid);
           if (gtEntry && gtEntry.label !== lbl) gtEntry.label = lbl;
           // Fix mounted component input
-          if (reg.__vueInstance && "label" in reg.__vueInstance &&
-              reg.__vueInstance.label !== lbl) {
+          if (
+            reg.__vueInstance &&
+            "label" in reg.__vueInstance &&
+            reg.__vueInstance.label !== lbl
+          ) {
             reg.__vueInstance.label = lbl;
           }
         } catch (_) {}
@@ -658,10 +718,21 @@ function loadLabelFile(file) {
     if (typeof text === "string") {
       importLabelsFromText(text);
       // store label filename for UI reference
-      try { labelFileName.value = labelName; } catch (e) {}
-      try { emit('update-files', { audioFileName: audioFileName.value || '', labelFileName: labelFileName.value || '' }); } catch (e) {}
-      try { setBackupFileNames(audioFileName.value, labelFileName.value); } catch (e) {}
-      showToast(`Labels loaded: ${labelName}`, { icon: "mdi-tag-multiple-outline" });
+      try {
+        labelFileName.value = labelName;
+      } catch (e) {}
+      try {
+        emit("update-files", {
+          audioFileName: audioFileName.value || "",
+          labelFileName: labelFileName.value || "",
+        });
+      } catch (e) {}
+      try {
+        setBackupFileNames(audioFileName.value, labelFileName.value);
+      } catch (e) {}
+      showToast(`Labels loaded: ${labelName}`, {
+        icon: "mdi-tag-multiple-outline",
+      });
     }
   };
   reader.readAsText(file);
@@ -671,7 +742,9 @@ function onLabelFile(e) {
   const file = e.target.files[0];
   if (!file) return;
   // Reset input upfront so the same file can be re-selected later
-  try { e.target.value = ""; } catch (err) {}
+  try {
+    e.target.value = "";
+  } catch (err) {}
   loadLabelFile(file);
 }
 
@@ -682,7 +755,12 @@ function handleDocDragOver(e) {
 
 function handleDocDragLeave(e) {
   // Only clear when leaving the browser viewport entirely
-  if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+  if (
+    e.clientX <= 0 ||
+    e.clientY <= 0 ||
+    e.clientX >= window.innerWidth ||
+    e.clientY >= window.innerHeight
+  ) {
     isDragOver.value = false;
   }
 }
@@ -746,7 +824,8 @@ function downloadLabels() {
   a.href = url;
   // Use original label filename if available, append timestamp before extension
   try {
-    const original = labelFileName && labelFileName.value ? labelFileName.value : null;
+    const original =
+      labelFileName && labelFileName.value ? labelFileName.value : null;
     const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
     let outName;
     if (original && original.length) {
@@ -919,7 +998,9 @@ async function importLabelsFromText(raw) {
   isImporting = false;
   // Immediately save a baseline backup (empty lastEditedLabels).
   // This also updates the snapshot so the interval won't fire for unedited data.
-  try { saveImmediateBackup(groundTruth); } catch (_) {}
+  try {
+    saveImmediateBackup(groundTruth);
+  } catch (_) {}
 }
 
 onMounted(() => {
@@ -943,38 +1024,51 @@ onMounted(() => {
 
   // Create the attachDrag function bound to our wavesurfer and regions plugin.
   // Pass a callback so drags can notify the editor to sync groundTruth entries.
-  attachDrag = createAttachDrag(wavesurfer, regionsPlugin, (r) => {
-    try {
-      ensureGroundTruthEntry(r);
-      // Also refresh exported text for UI if needed
-      refreshIoTextFromGroundTruth();
-    } catch (err) {
-      /* ignore */
-    }
-  }, (r) => {
-    // Track the primary dragged/resized region as edited.
-    try {
-      const uid = r.data && r.data.uid;
-      if (!uid) return;
-      const entry = groundTruth.find(e => e.uid === uid);
-      if (!entry) return;
-      const sorted = [...groundTruth].sort((a, b) => (a.start || 0) - (b.start || 0));
-      const pos = sorted.findIndex(e => e.uid === uid) + 1;
-      if (pos > 0) trackLabelEdit(pos, entry.label || '');
-    } catch (_) {}
-  });
+  attachDrag = createAttachDrag(
+    wavesurfer,
+    regionsPlugin,
+    (r) => {
+      try {
+        ensureGroundTruthEntry(r);
+        // Also refresh exported text for UI if needed
+        refreshIoTextFromGroundTruth();
+      } catch (err) {
+        /* ignore */
+      }
+    },
+    (r) => {
+      // Track the primary dragged/resized region as edited.
+      try {
+        const uid = r.data && r.data.uid;
+        if (!uid) return;
+        const entry = groundTruth.find((e) => e.uid === uid);
+        if (!entry) return;
+        const sorted = [...groundTruth].sort(
+          (a, b) => (a.start || 0) - (b.start || 0),
+        );
+        const pos = sorted.findIndex((e) => e.uid === uid) + 1;
+        if (pos > 0) trackLabelEdit(pos, entry.label || "");
+      } catch (_) {}
+    },
+  );
 
   wavesurfer.value.on("ready", () => {
     waveReady.value = true;
-    try { loadingWave.value = false; } catch (e) {}
+    try {
+      loadingWave.value = false;
+    } catch (e) {}
     // Move cursor to the beginning of the file when a new audio/video is loaded
     try {
       if (wavesurfer.value && typeof wavesurfer.value.seekTo === "function") {
         wavesurfer.value.seekTo(0);
-      } else if (wavesurfer.value && typeof wavesurfer.value.setCurrentTime === "function") {
+      } else if (
+        wavesurfer.value &&
+        typeof wavesurfer.value.setCurrentTime === "function"
+      ) {
         wavesurfer.value.setCurrentTime(0);
       }
-      if (wavesurfer.value && typeof wavesurfer.value.pause === "function") wavesurfer.value.pause();
+      if (wavesurfer.value && typeof wavesurfer.value.pause === "function")
+        wavesurfer.value.pause();
     } catch (e) {}
     if (pendingAudioName) {
       showToast(`Loaded: ${pendingAudioName}`, { icon: "mdi-waveform" });
@@ -1038,7 +1132,8 @@ onMounted(() => {
     // from the importing map and immediately clean up the entry so it doesn't linger.
     const importedEntry =
       r.data && r.data.uid ? importingEntries.get(r.data.uid) : null;
-    if (importedEntry && r.data && r.data.uid) importingEntries.delete(r.data.uid);
+    if (importedEntry && r.data && r.data.uid)
+      importingEntries.delete(r.data.uid);
     const labelOverride = importedEntry ? importedEntry.label : undefined;
     const entry = ensureGroundTruthEntry(r, labelOverride);
     if (!entry) return;
@@ -1067,7 +1162,7 @@ onMounted(() => {
         onAddRegionRight: (initialLabel) => {
           addAdjacentRegion("right", r, initialLabel);
         },
-            showExtendedCommands: showExtendedCommands.value,
+        showExtendedCommands: showExtendedCommands.value,
         canAddLeft: computeCanAddAdjacent(r).canLeft,
         canAddRight: computeCanAddAdjacent(r).canRight,
       });
@@ -1076,7 +1171,8 @@ onMounted(() => {
       r.__vueInstance = instance;
       // Ensure the instance receives the current showExtendedCommands flag
       try {
-        if (instance) instance.showExtendedCommands = showExtendedCommands.value;
+        if (instance)
+          instance.showExtendedCommands = showExtendedCommands.value;
       } catch (e) {}
       // ensure instance flags are set on the mounted instance
       try {
@@ -1106,17 +1202,19 @@ onMounted(() => {
     }
   });
 
-function updateAllShowExtended() {
-  if (!regionsPlugin.value) return;
-  const regs = regionsPlugin.value.getRegions().filter((r) => r && r.__vueInstance);
-  regs.forEach((r) => {
-    try {
-      r.__vueInstance.showExtendedCommands = showExtendedCommands.value;
-    } catch (e) {}
-  });
-}
+  function updateAllShowExtended() {
+    if (!regionsPlugin.value) return;
+    const regs = regionsPlugin.value
+      .getRegions()
+      .filter((r) => r && r.__vueInstance);
+    regs.forEach((r) => {
+      try {
+        r.__vueInstance.showExtendedCommands = showExtendedCommands.value;
+      } catch (e) {}
+    });
+  }
 
-watch(showExtendedCommands, () => updateAllShowExtended());
+  watch(showExtendedCommands, () => updateAllShowExtended());
 
   regionsPlugin.value.on("region-updated", (region) => {
     ensureGroundTruthEntry(region);
