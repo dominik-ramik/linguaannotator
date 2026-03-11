@@ -154,37 +154,33 @@
                         size="default"
                         variant="tonal"
                         color="secondary"
-                        prepend-icon="mdi-file-document-outline"
+                        prepend-icon="mdi-download"
                         class="mr-3"
                         style="align-self: flex-start;"
                         @click="handleDownloadBackup(backup.key)"
                         title="Download backup as label file"
-                      >Download</v-btn>
+                      >{{ formatBackupDate(backup.timestamp) }}</v-btn>
                     </template>
-                    <v-list-item-title class="text-body-small mb-1">
-                      {{ formatBackupDate(backup.timestamp) }}
-                    </v-list-item-title>
                     <v-list-item-subtitle class="text-caption" style="white-space: normal; opacity: 1;">
                       <template v-if="backup.audioFileName || backup.labelFileName">
-                        <span v-if="backup.audioFileName">Audio: {{ backup.audioFileName }}</span>
-                        <span v-if="backup.audioFileName && backup.labelFileName"> &middot; </span>
-                        <span v-if="backup.labelFileName">Labels: {{ backup.labelFileName }}</span>
+                        <span v-if="backup.audioFileName"><b>Audio:</b> {{ backup.audioFileName }}</span>
+                        <br />
+                        <span v-if="backup.labelFileName"><b>Labels:</b> {{ backup.labelFileName }}</span>
                         <br />
                       </template>
-                      {{ backup.labelCount }}
-                      label{{ backup.labelCount !== 1 ? 's' : '' }}
+                      <b>Labels count:</b> {{ backup.labelCount }}
                       <template
                         v-if="
                           backup.lastEditedLabels &&
                           backup.lastEditedLabels.length > 0
                         "
                       >
-                        <br />Last edited:
+                        <br /><b>Last edited:</b>
                         <ul class="backup-edited-list">
                           <li
                             v-for="lbl in backup.lastEditedLabels"
                             :key="lbl"
-                          >{{ lbl.split(':').slice(1).join(':') }} <span class="text-medium-emphasis">(#{{ lbl.split(':')[0] }})</span></li>
+                          >{{ lbl.split(':').slice(1).join(':') }} <span class="text-medium-emphasis" style="color: gray;">(#{{ lbl.split(':')[0] }})</span></li>
                         </ul>
                       </template>
                     </v-list-item-subtitle>
